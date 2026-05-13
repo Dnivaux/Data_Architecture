@@ -1,0 +1,262 @@
+2026-05-13T16:56:34 [INFO] dvf — DVF ingestion started — 2026-01-01 to 2026-05-13 — 20 arrondissements
+2026-05-13T16:56:34 [INFO] dvf —   Fetching arrondissement 01 (postal=75001)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75001 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 01
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 02 (postal=75002)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75002 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 02
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 03 (postal=75003)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75003 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 03
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 04 (postal=75004)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75004 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 04
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 05 (postal=75005)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75005 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 05
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 06 (postal=75006)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75006 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 06
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 07 (postal=75007)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75007 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 07
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 08 (postal=75008)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75008 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 08
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 09 (postal=75009)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75009 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 09
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 10 (postal=75010)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75010 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 10
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 11 (postal=75011)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75011 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 11
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 12 (postal=75012)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75012 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 12
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 13 (postal=75013)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75013 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 13
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 14 (postal=75014)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75014 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 14
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 15 (postal=75015)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75015 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 15
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 16 (postal=75016)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75016 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 16
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 17 (postal=75017)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75017 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 17
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 18 (postal=75018)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75018 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 18
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 19 (postal=75019)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75019 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 19
+2026-05-13T16:56:35 [INFO] dvf —   Fetching arrondissement 20 (postal=75020)
+2026-05-13T16:56:35 [WARNING] dvf — DVF 75020 offset=0 → HTTP 404: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/dvf/mutation</pre>
+</body>
+</html>
+
+2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 20
+2026-05-13T16:56:35 [WARNING] dvf — DVF ingestion produced no rows.
