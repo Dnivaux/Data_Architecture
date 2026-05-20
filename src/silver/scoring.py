@@ -1,12 +1,19 @@
 """
-Silver Layer Scoring
-====================
-Spatial processing & scoring with GeoPandas to compute:
-  - "Animé" (Lively): density of bars, nightclubs, cultural POI
-  - "Calme" (Calm): inverse of crime + good air quality
-  - "Accessibilité financière" (Financial accessibility): inverse of median price + social housing %
+Silver Layer — Scoring normalisé 0-100 par arrondissement
+==========================================================
+Produit 4 scores stratégiques + les 3 scores historiques du projet,
+tous normalisés en min-max sur [0, 100].
 
-Outputs GeoDataFrames aggregated by arrondissement (or IRIS).
+Scores historiques (inchangés) :
+  - score_anime       : densité bars / nightclubs / parcs (OSM)
+  - score_calme       : inverse criminalité + qualité air   [RÉEL, plus placeholder]
+  - score_accessibilite : inverse prix DVF + logement social
+
+Nouveaux scores stratégiques :
+  - score_connectivity  : fibre + 4G/5G + ratio T2-T3
+  - score_mobility      : disponibilité Vélib' + densité PRIM
+  - score_health_env    : végétalisation + îlots de fraîcheur
+  - score_tranquility   : inverse (crime + bruit + bars/clubs)
 """
 from __future__ import annotations
 
@@ -16,160 +23,326 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
-from shapely.geometry import Point
 
-from src.ingestion.base import BRONZE_ROOT, get_logger, read_parquet
+from src.ingestion.base import get_logger, read_parquet
 
 LOG_DIR = Path(__file__).parents[2] / "logs"
 SILVER_ROOT = Path(__file__).parents[2] / "data" / "silver"
 
+PARIS_ARRONDISSEMENTS = list(range(1, 21))
 
-def _normalize_score(series: pd.Series, min_val: float = 0.0, max_val: float = 100.0) -> pd.Series:
-    """Min-max normalize a series to [min_val, max_val]. Handles NaN gracefully."""
-    s = series.fillna(0)
-    if s.max() == s.min():
-        return pd.Series([50.0] * len(s), index=s.index)
-    normalized = (s - s.min()) / (s.max() - s.min())
-    return normalized * (max_val - min_val) + min_val
 
+# ---------------------------------------------------------------------------
+# Utilitaire de normalisation
+# ---------------------------------------------------------------------------
+
+def _normalize(series: pd.Series, invert: bool = False) -> pd.Series:
+    """
+    Normalisation min-max sur [0, 100].
+    Si invert=True, une valeur haute donne un score bas (ex : criminalité).
+    Les NaN sont remplacés par la médiane avant normalisation.
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    median_val = s.median()
+    s = s.fillna(median_val if pd.notna(median_val) else 0.0)
+
+    lo, hi = s.min(), s.max()
+    if hi == lo:
+        return pd.Series(50.0, index=series.index)
+
+    normalized = (s - lo) / (hi - lo) * 100.0
+    return (100.0 - normalized) if invert else normalized
+
+
+def _read_silver(filename: str) -> pd.DataFrame:
+    """Charge une table Silver Parquet. Retourne DataFrame vide si absente."""
+    path = SILVER_ROOT / filename
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        return pd.read_parquet(path, engine="pyarrow")
+    except Exception:
+        return pd.DataFrame()
+
+
+# ---------------------------------------------------------------------------
+# Scoring class (compatible avec aggregation.py existant)
+# ---------------------------------------------------------------------------
 
 class ArrondissementScorer:
-    """Compute livability scores by arrondissement."""
+    """
+    Calcule tous les scores de vivabilité par arrondissement.
+    Compatible avec l'interface existante de aggregation.py.
+    """
 
     def __init__(self, logger: logging.Logger | None = None):
         self.logger = logger or get_logger("scoring", LOG_DIR)
         self.boundaries_gdf = self._load_boundaries()
 
     def _load_boundaries(self) -> gpd.GeoDataFrame:
-        """Load arrondissement boundaries as GeoDataFrame."""
         df = read_parquet("boundaries")
         if df.empty:
-            self.logger.error("No boundaries data found. Run ingestion first.")
+            self.logger.error("Boundaries vides — run ingest_boundaries() d'abord")
             return gpd.GeoDataFrame()
 
-        # Convert WKT to geometry
-        if "geometry_wkt" in df.columns:
-            df = df.copy()
-            df["geometry"] = gpd.GeoSeries.from_wkt(df["geometry_wkt"])
+        geom_col = "geometry_wkt" if "geometry_wkt" in df.columns else "geometry"
+        try:
+            geom = gpd.GeoSeries.from_wkt(df[geom_col])
+        except Exception as exc:
+            self.logger.error("Impossible de parser boundaries : %s", exc)
+            return gpd.GeoDataFrame()
 
-        gdf = gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:4326")
-        self.logger.info("Loaded %d arrondissements", len(gdf))
-        return gdf
+        gdf = gpd.GeoDataFrame(df, geometry=geom, crs="EPSG:4326")
+        if "arrondissement" not in gdf.columns:
+            candidates = [c for c in gdf.columns if "arr" in c.lower()]
+            if candidates:
+                gdf = gdf.rename(columns={candidates[0]: "arrondissement"})
+        self.logger.info("Boundaries chargées : %d polygones", len(gdf))
+        return gdf[["arrondissement", "geometry"]].copy()
+
+    # ------------------------------------------------------------------
+    # Scores historiques (refactorisés)
+    # ------------------------------------------------------------------
 
     def score_anime(self) -> pd.DataFrame:
-        """
-        "Animé" (Lively) score: density of bars, nightclubs, cultural activities.
-        Based on OSM POI counts.
-        """
+        """Densité bars + nightclubs + parcs (OSM). Score 0-100."""
         osm_df = read_parquet("osm")
-        if osm_df.empty:
-            self.logger.warning("No OSM data for 'Animé' score")
-            return pd.DataFrame()
+        if osm_df.empty or self.boundaries_gdf.empty:
+            self.logger.warning("Données OSM ou boundaries absentes pour score animé")
+            return pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS, "anime_score": 50.0})
 
         osm_gdf = gpd.GeoDataFrame(
             osm_df,
             geometry=gpd.points_from_xy(osm_df["longitude"], osm_df["latitude"]),
             crs="EPSG:4326",
         )
+        joined = gpd.sjoin(
+            osm_gdf, self.boundaries_gdf[["arrondissement", "geometry"]],
+            how="left", predicate="within",
+        )
 
-        # Count POI by type
-        counts = {}
-        for arrond in self.boundaries_gdf["arrondissement"].values:
-            bounds = self.boundaries_gdf[self.boundaries_gdf["arrondissement"] == arrond]
-            if bounds.empty:
-                continue
+        counts = (
+            joined.groupby(["arrondissement", "amenity_type"])
+            .size()
+            .unstack(fill_value=0)
+            .reset_index()
+        )
+        for col in ["bar", "nightclub", "park"]:
+            if col not in counts.columns:
+                counts[col] = 0
 
-            # Points-in-polygon: which OSM features fall in this arrondissement?
-            poi_in_arrond = gpd.sjoin(osm_gdf, bounds, how="inner", predicate="within")
-            counts[arrond] = {
-                "bar_count": len(poi_in_arrond[poi_in_arrond["amenity_type"] == "bar"]),
-                "nightclub_count": len(poi_in_arrond[poi_in_arrond["amenity_type"] == "nightclub"]),
-                "park_count": len(poi_in_arrond[poi_in_arrond["amenity_type"] == "park"]),
-            }
-
-        df = pd.DataFrame(counts).T.fillna(0)
-        df["total_poi"] = df["bar_count"] + df["nightclub_count"] + df["park_count"]
-        df["anime_score"] = _normalize_score(df["total_poi"], 0, 100)
-        return df[["bar_count", "nightclub_count", "park_count", "total_poi", "anime_score"]].reset_index(names=["arrondissement"])
+        counts["total_poi"] = counts["bar"] + counts["nightclub"] + counts["park"]
+        counts["anime_score"] = _normalize(counts["total_poi"]).round(1)
+        counts = counts.rename(columns={
+            "bar": "bar_count", "nightclub": "nightclub_count", "park": "park_count"
+        })
+        return counts[["arrondissement", "bar_count", "nightclub_count",
+                        "park_count", "total_poi", "anime_score"]]
 
     def score_calme(self) -> pd.DataFrame:
         """
-        "Calme" (Calm) score: inverse of crime + good air quality.
-        Crime: fewer incidents is better. Air quality: lower pollutant values is better.
+        Inverse criminalité + qualité air ATMO.
+        Score 100 = très calme, 0 = très agité.
         """
-        # For now, we'll compute a placeholder since crime & air_quality data stubs exist
-        # Once they're implemented, real aggregation will happen
-        calme_scores = []
-        for arrond in self.boundaries_gdf["arrondissement"].values:
-            # TODO: read crime data and aggregate by arrondissement
-            # TODO: read air_quality data and compute mean pollutant levels
-            # For now, placeholder score
-            calme_scores.append({
-                "arrondissement": arrond,
-                "crime_incidents": 0,  # placeholder
-                "air_quality_index": 50,  # placeholder (0-100, lower=better air)
-                "calme_score": 75,  # placeholder
-            })
-        return pd.DataFrame(calme_scores)
+        base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
+
+        # Crime SSMSI
+        df_crime = read_parquet("crime")
+        if not df_crime.empty and "arrondissement" in df_crime.columns:
+            if "year" in df_crime.columns:
+                df_crime = df_crime[df_crime["year"] == df_crime["year"].max()]
+            crime_agg = (
+                df_crime.groupby("arrondissement")["crime_count"]
+                .sum().reset_index(name="crime_total")
+            )
+            base = base.merge(crime_agg, on="arrondissement", how="left")
+        else:
+            base["crime_total"] = pd.NA
+
+        # Qualité air Airparif (indice ATMO 1=bon → 6=très mauvais)
+        df_air = read_parquet("air_quality")
+        if not df_air.empty and "arrondissement" in df_air.columns:
+            air_agg = (
+                df_air.groupby("arrondissement")["indice_atmo_num"]
+                .mean().reset_index(name="atmo_mean")
+            )
+            base = base.merge(air_agg, on="arrondissement", how="left")
+        else:
+            base["atmo_mean"] = pd.NA
+
+        # Score calme = moyenne des inverses normalisés
+        score_crime = _normalize(base["crime_total"], invert=True)
+        score_air   = _normalize(base["atmo_mean"],   invert=True)
+        base["calme_score"] = ((score_crime + score_air) / 2).round(1)
+        base["crime_incidents"] = base.get("crime_total", pd.NA)
+        base["air_quality_index"] = base.get("atmo_mean", pd.NA)
+
+        return base[["arrondissement", "crime_incidents", "air_quality_index", "calme_score"]]
 
     def score_accessibilite(self) -> pd.DataFrame:
-        """
-        "Accessibilité financière" (Financial accessibility): inverse of median price + social housing %.
-        Higher score = more affordable.
-        """
+        """Inverse prix DVF (médian) + % logement social. Score 100 = très accessible."""
+        base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
+
         dvf_df = read_parquet("dvf")
-        if dvf_df.empty:
-            self.logger.warning("No DVF data for 'Accessibilité' score")
-            return pd.DataFrame()
+        if not dvf_df.empty and self.boundaries_gdf is not None and not self.boundaries_gdf.empty:
+            dvf_df = dvf_df.dropna(subset=["latitude", "longitude", "valeur_fonciere"])
+            dvf_gdf = gpd.GeoDataFrame(
+                dvf_df,
+                geometry=gpd.points_from_xy(dvf_df["longitude"], dvf_df["latitude"]),
+                crs="EPSG:4326",
+            )
+            joined = gpd.sjoin(
+                dvf_gdf, self.boundaries_gdf[["arrondissement", "geometry"]],
+                how="left", predicate="within",
+            )
+            price_agg = (
+                joined.groupby("arrondissement")["valeur_fonciere"]
+                .median().reset_index(name="median_price")
+            )
+            base = base.merge(price_agg, on="arrondissement", how="left")
+        else:
+            self.logger.warning("DVF ou boundaries vides — prix médian à NA")
+            base["median_price"] = pd.NA
 
-        dvf_gdf = gpd.GeoDataFrame(
-            dvf_df,
-            geometry=gpd.points_from_xy(dvf_df["longitude"], dvf_df["latitude"]),
-            crs="EPSG:4326",
+        base["social_housing_pct"] = pd.NA  # alimenté par revenus.py si disponible
+        base["price_score"]        = _normalize(base["median_price"], invert=True)
+        base["accessibilite_score"] = base["price_score"].round(1)
+        return base[["arrondissement", "median_price",
+                     "social_housing_pct", "accessibilite_score"]]
+
+    # ------------------------------------------------------------------
+    # Nouveaux scores stratégiques (lus depuis Silver indicators)
+    # ------------------------------------------------------------------
+
+    def score_connectivity(self) -> pd.DataFrame:
+        """
+        Score Connectivité 0-100.
+        Composantes : pct_eligible_ftth (40%), pct_pop_4g_mean (30%),
+                      pct_pop_5g_mean (15%), pct_t2_t3 (15%).
+        """
+        df = _read_silver("connectivity_by_arrondissement.parquet")
+        base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
+        if df.empty:
+            self.logger.warning("Silver connectivity absent — score par défaut 50")
+            base["connectivity_score"] = 50.0
+            return base
+
+        base = base.merge(df, on="arrondissement", how="left")
+        s_fibre = _normalize(base.get("pct_eligible_ftth",  pd.Series([50.0]*20)))
+        s_4g    = _normalize(base.get("pct_pop_4g_mean",    pd.Series([50.0]*20)))
+        s_5g    = _normalize(base.get("pct_pop_5g_mean",    pd.Series([50.0]*20)))
+        s_t2t3  = _normalize(base.get("pct_t2_t3",          pd.Series([50.0]*20)))
+
+        base["connectivity_score"] = (
+            0.40 * s_fibre + 0.30 * s_4g + 0.15 * s_5g + 0.15 * s_t2t3
+        ).round(1)
+        return base[["arrondissement", "pct_eligible_ftth", "pct_pop_4g_mean",
+                     "pct_pop_5g_mean", "pct_t2_t3", "connectivity_score"]]
+
+    def score_mobility(self) -> pd.DataFrame:
+        """
+        Score Mobilité 0-100.
+        Composantes : avg_bikes_available (40%), station_count_velib (30%),
+                      avg_bikes_pct (30%).
+        """
+        df = _read_silver("mobility_by_arrondissement.parquet")
+        base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
+        if df.empty:
+            self.logger.warning("Silver mobility absent — score par défaut 50")
+            base["mobility_score"] = 50.0
+            return base
+
+        base = base.merge(df, on="arrondissement", how="left")
+        s_bikes   = _normalize(base.get("avg_bikes_available", pd.Series([0.0]*20)))
+        s_stations = _normalize(base.get("station_count_velib", pd.Series([0.0]*20)))
+        # Taux d'occupation inverse : moins saturé = meilleur accès aux bornes
+        s_docks   = _normalize(base.get("avg_docks_available", pd.Series([0.0]*20)))
+
+        base["mobility_score"] = (
+            0.40 * s_bikes + 0.30 * s_stations + 0.30 * s_docks
+        ).round(1)
+        return base[["arrondissement", "station_count_velib",
+                     "avg_bikes_available", "avg_docks_available", "mobility_score"]]
+
+    def score_health_env(self) -> pd.DataFrame:
+        """
+        Score Santé Environnementale 0-100.
+        Composantes : surface_fraicheur_ha (35%), arbres_per_km2 (35%),
+                      nb_ilots_fraicheur (30%).
+        """
+        df = _read_silver("health_env_by_arrondissement.parquet")
+        base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
+        if df.empty:
+            self.logger.warning("Silver health_env absent — score par défaut 50")
+            base["health_env_score"] = 50.0
+            return base
+
+        base = base.merge(df, on="arrondissement", how="left")
+        s_surface = _normalize(base.get("surface_fraicheur_ha", pd.Series([0.0]*20)))
+        s_arbres  = _normalize(base.get("arbres_per_km2",       pd.Series([0.0]*20)))
+        s_ilots   = _normalize(base.get("nb_ilots_fraicheur",   pd.Series([0.0]*20)))
+
+        base["health_env_score"] = (
+            0.35 * s_surface + 0.35 * s_arbres + 0.30 * s_ilots
+        ).round(1)
+        return base[["arrondissement", "surface_fraicheur_ha",
+                     "arbres_per_km2", "nb_ilots_fraicheur", "health_env_score"]]
+
+    def score_tranquility(self) -> pd.DataFrame:
+        """
+        Score Tranquillité 0-100.
+        Composantes : crime (invert, 40%), bruit Lden (invert, 35%),
+                      nb_bars+clubs (invert, 25%).
+        Note : un score élevé signifie arrondissement TRANQUILLE (pas dynamique).
+        """
+        df = _read_silver("tranquility_by_arrondissement.parquet")
+        base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
+        if df.empty:
+            self.logger.warning("Silver tranquility absent — score par défaut 50")
+            base["tranquility_score"] = 50.0
+            return base
+
+        base = base.merge(df, on="arrondissement", how="left")
+        s_crime = _normalize(base.get("crime_count_total",      pd.Series([0.0]*20)), invert=True)
+        s_bruit = _normalize(base.get("noise_lden_surface_ha",  pd.Series([0.0]*20)), invert=True)
+
+        nightlife = (
+            base.get("nb_bars", pd.Series([0.0]*20)).fillna(0)
+            + base.get("nb_nightclubs", pd.Series([0.0]*20)).fillna(0)
         )
+        s_nightlife = _normalize(nightlife, invert=True)
 
-        accessibilite_scores = []
-        for arrond in self.boundaries_gdf["arrondissement"].values:
-            bounds = self.boundaries_gdf[self.boundaries_gdf["arrondissement"] == arrond]
-            if bounds.empty:
-                continue
+        base["tranquility_score"] = (
+            0.40 * s_crime + 0.35 * s_bruit + 0.25 * s_nightlife
+        ).round(1)
+        return base[["arrondissement", "crime_count_total", "noise_lden_surface_ha",
+                     "nb_bars", "nb_nightclubs", "tranquility_score"]]
 
-            dvf_in_arrond = gpd.sjoin(dvf_gdf, bounds, how="inner", predicate="within")
-            if dvf_in_arrond.empty:
-                median_price = None
-            else:
-                median_price = dvf_in_arrond["valeur_fonciere"].median()
-
-            # TODO: Once revenus is implemented, get social_housing_percent
-            social_housing_pct = 0  # placeholder
-
-            # Inverse of price: lower price → higher accessibility
-            price_score = 100 - (_normalize_score(pd.Series([median_price or 0]))[0] if median_price else 50)
-            housing_score = 50 + (social_housing_pct * 0.5)  # Higher social housing = better accessibility
-            accessibilite_scores.append({
-                "arrondissement": arrond,
-                "median_price": median_price,
-                "social_housing_pct": social_housing_pct,
-                "accessibilite_score": (price_score + housing_score) / 2,
-            })
-
-        return pd.DataFrame(accessibilite_scores)
+    # ------------------------------------------------------------------
+    # Orchestrateur global (interface publique pour aggregation.py)
+    # ------------------------------------------------------------------
 
     def compute_all_scores(self) -> pd.DataFrame:
-        """Compute all three livability scores and combine into one DataFrame."""
-        self.logger.info("Computing all livability scores")
+        """
+        Calcule tous les scores (historiques + nouveaux) et les fusionne.
+        Retourne un DataFrame par arrondissement avec toutes les colonnes.
+        """
+        self.logger.info("Calcul de tous les scores par arrondissement")
 
-        anime = self.score_anime()
-        calme = self.score_calme()
+        anime         = self.score_anime()
+        calme         = self.score_calme()
         accessibilite = self.score_accessibilite()
+        connectivity  = self.score_connectivity()
+        mobility      = self.score_mobility()
+        health_env    = self.score_health_env()
+        tranquility   = self.score_tranquility()
 
-        # Merge on arrondissement
-        result = (
-            self.boundaries_gdf[["arrondissement"]].copy()
-            .merge(anime, on="arrondissement", how="left")
-            .merge(calme, on="arrondissement", how="left")
-            .merge(accessibilite, on="arrondissement", how="left")
-        )
+        base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
+        for df in [anime, calme, accessibilite, connectivity,
+                   mobility, health_env, tranquility]:
+            if not df.empty:
+                base = base.merge(df, on="arrondissement", how="left")
 
-        result["ingested_at"] = datetime.now(timezone.utc)
-        return result
+        base["computed_at"] = datetime.now(timezone.utc)
+        self.logger.info("Scores calculés pour %d arrondissements", len(base))
+        return base

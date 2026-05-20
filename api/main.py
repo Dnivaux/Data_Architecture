@@ -1,97 +1,213 @@
 """
 Urban Data Explorer – FastAPI Backend
 ======================================
-REST API serving enriched geospatial data from the Silver/Gold layers to MapLibre frontend.
+REST API servant les données Gold depuis PostgreSQL.
 
-Endpoints:
-  /api/scores/*        – Livability scores (Animé, Calme, Accessibilité financière)
-  /api/poi/*           – Points of Interest (bars, nightclubs, parks)
-  /api/prices/*        – Property price timeline (2014-2023)
-  /api/comparison/*    – Compare two arrondissements
-  /health              – Health check
-  /docs                – Swagger UI
+Endpoints :
+  GET /api/scores/all              – Scores vivabilité (20 arrondissements)
+  GET /api/scores/{n}              – Score d'un arrondissement
+  GET /api/scores/indicators/all   – 4 nouveaux scores stratégiques
+  GET /api/poi/                    – POI (filtrage par catégorie optionnel)
+  GET /api/poi/by-category/{cat}   – POI par catégorie
+  GET /api/prices/timeline         – Série temporelle DVF
+  GET /api/prices/arrondissement/{n} – Historique prix d'un arrondissement
+  GET /api/comparison/             – Comparaison de 2 arrondissements
+  GET /health                      – Health check + métriques pool DB
+  GET /docs                        – Swagger UI
+
+Middlewares :
+  X-Process-Time : temps de traitement en ms ajouté à chaque réponse
+  CORS           : origins configurables via ALLOWED_ORIGINS (env)
 """
+from __future__ import annotations
+
+import logging
+import os
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.dependencies import get_data_cache
+from api.dependencies import get_db_status, verify_db_connection
 from api.routers import comparison, poi, prices, scores
-from api.schemas import HealthCheck
+from api.schemas import HealthCheck, HealthCheckExtended
 
-# ============================================================================
-# Lifespan
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Logging structuré (format : timestamp | level | logger | message)
+# ---------------------------------------------------------------------------
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+logger = logging.getLogger("api")
+
+# ---------------------------------------------------------------------------
+# Lifespan — startup/shutdown PostgreSQL-aware
+# ---------------------------------------------------------------------------
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events."""
-    # Startup: preload common tables into cache
-    cache = get_data_cache()
-    try:
-        from api.dependencies import load_gold_table
-        load_gold_table("arrondissement_summary.parquet")
-        load_gold_table("poi_catalog.parquet")
-        load_gold_table("price_timeline.parquet")
-    except Exception as e:
-        print(f"Warning: Failed to preload cache: {e}")
+    """Startup : vérifie la connexion PostgreSQL. Shutdown : libère le pool."""
+    logger.info("=" * 60)
+    logger.info("Urban Data Explorer API — démarrage")
+    logger.info("=" * 60)
 
-    yield
+    db_ok = verify_db_connection()
+    if not db_ok:
+        logger.warning(
+            "PostgreSQL introuvable au démarrage. "
+            "Configurer DATABASE_URL dans .env. "
+            "L'API démarre quand même mais les endpoints retourneront 503."
+        )
+    else:
+        status = get_db_status()
+        logger.info(
+            "Pool PostgreSQL prêt — size=%d, overflow=%d, host=%s",
+            status["pool_size"], status["overflow"], status["database_url"],
+        )
 
-    # Shutdown: clear cache
-    cache.clear()
+    yield  # ← l'application tourne ici
+
+    # Shutdown : dispose du pool proprement
+    from api.dependencies import engine
+    engine.dispose()
+    logger.info("Pool PostgreSQL fermé — arrêt propre")
 
 
-# ============================================================================
-# App instantiation
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="Urban Data Explorer API",
-    description="Geospatial API for Paris housing & lifestyle analysis",
-    version="0.1.0",
+    description=(
+        "API géospatiale pour l'analyse logement & qualité de vie à Paris. "
+        "Données servies depuis PostgreSQL (tables Gold du pipeline Medallion)."
+    ),
+    version="2.0.0",
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
-# CORS middleware for frontend access
+# ---------------------------------------------------------------------------
+# Middleware 1 — Mesure du temps de traitement (Critère C2.4)
+# ---------------------------------------------------------------------------
+
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    """
+    Mesure le temps exact de traitement de chaque requête.
+
+    Ajoute dans les headers de réponse :
+      X-Process-Time : durée en millisecondes (ex: "4.27ms")
+
+    Logue également : méthode, path, status_code, durée.
+    Permet de confirmer les critères de performance (SLA < 200ms en P99).
+    """
+    start_ns = time.perf_counter_ns()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000  # ns → ms
+
+    response.headers["X-Process-Time"] = f"{elapsed_ms:.2f}ms"
+
+    # Log structuré — lisible par ELK, Datadog, ou grep simple
+    logger.info(
+        "%s %s → %d | %.2fms",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Middleware 2 — CORS
+# ---------------------------------------------------------------------------
+
+_ALLOWED_ORIGINS = os.environ.get(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:8080,http://localhost:5173",
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8080", "*"],  # TODO: restrict in prod
+    allow_origins=_ALLOWED_ORIGINS + ["*"],  # * restreint en prod via env
     allow_credentials=True,
     allow_methods=["GET", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Process-Time"],  # expose le header aux clients JS
 )
 
-# ============================================================================
-# Routes
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Routeurs
+# ---------------------------------------------------------------------------
 
-app.include_router(scores.router, prefix="/api")
-app.include_router(poi.router, prefix="/api")
-app.include_router(prices.router, prefix="/api")
+app.include_router(scores.router,     prefix="/api")
+app.include_router(poi.router,        prefix="/api")
+app.include_router(prices.router,     prefix="/api")
 app.include_router(comparison.router, prefix="/api")
 
+# ---------------------------------------------------------------------------
+# Endpoints système
+# ---------------------------------------------------------------------------
 
-@app.get("/health", response_model=HealthCheck, tags=["system"])
+
+@app.get(
+    "/health",
+    response_model=HealthCheckExtended,
+    tags=["system"],
+    summary="Health check avec métriques pool DB",
+)
 async def health_check():
-    """Health check endpoint."""
-    return HealthCheck(
-        status="ok",
-        message="Urban Data Explorer API is running",
+    """
+    Vérifie l'état de l'API et de la connexion PostgreSQL.
+    Retourne les métriques du pool de connexions pour le monitoring.
+    """
+    from api.dependencies import engine
+    from sqlalchemy import text
+
+    db_ok = False
+    gold_tables: list[str] = []
+    try:
+        with engine.connect() as conn:
+            db_ok = True
+            rows = conn.execute(text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_name LIKE 'gold_%' ORDER BY table_name"
+            )).fetchall()
+            gold_tables = [r[0] for r in rows]
+    except Exception as exc:
+        logger.error("Health check DB error: %s", exc)
+
+    pool_status = get_db_status()
+
+    return HealthCheckExtended(
+        status="ok" if db_ok else "degraded",
+        message="API opérationnelle" if db_ok else "PostgreSQL inaccessible",
+        database_connected=db_ok,
+        gold_tables_found=gold_tables,
+        pool_size=pool_status["pool_size"],
+        pool_checked_out=pool_status["checked_out"],
+        database_host=pool_status["database_url"],
     )
 
 
 @app.get("/", tags=["system"], include_in_schema=False)
 async def root():
-    """Root redirect to docs."""
-    return JSONResponse(
-        status_code=307,
-        headers={"Location": "/docs"},
-    )
+    return JSONResponse(status_code=307, headers={"Location": "/docs"})
 
+
+# ---------------------------------------------------------------------------
+# Point d'entrée uvicorn
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
@@ -102,4 +218,5 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
         log_level="info",
+        access_log=False,  # désactivé : notre middleware gère le logging
     )

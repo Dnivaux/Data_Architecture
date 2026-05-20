@@ -1,69 +1,131 @@
 """
-/api/prices/* routes – Property price timeline and historical data.
+/api/prices/* — Série temporelle des prix immobiliers (DVF).
+Source : PostgreSQL table gold_price_timeline.
 """
-from fastapi import APIRouter, HTTPException, Query
+from __future__ import annotations
 
-from api.dependencies import load_gold_table
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from api.dependencies import get_db
 from api.schemas import PriceTimeline
 
 router = APIRouter(prefix="/prices", tags=["prices"])
+
+_PRICE_COLS = "arrondissement, year, median_price, COALESCE(transaction_count, 0) AS transaction_count"
+
+
+def _row_to_price(row) -> PriceTimeline:
+    return PriceTimeline(
+        arrondissement=int(row["arrondissement"]),
+        year=int(row["year"]),
+        median_price=float(row["median_price"]) if row["median_price"] is not None else None,
+        transaction_count=int(row["transaction_count"]),
+    )
 
 
 @router.get(
     "/timeline",
     response_model=list[PriceTimeline],
-    summary="Price evolution timeline",
-    description="Returns median prices by arrondissement and year (2014-2023). Use for the timeline slider.",
+    summary="Évolution des prix (tous arrondissements)",
+    description=(
+        "Retourne les prix médians DVF par arrondissement et par année. "
+        "Filtre optionnel par arrondissement pour le slider temporel du dashboard."
+    ),
 )
 def get_price_timeline(
-    arrondissement: int | None = Query(None, ge=1, le=20, description="Optional: filter by arrondissement")
-):
-    """Fetch price timeline data."""
-    df = load_gold_table("price_timeline.parquet")
-    if df.empty:
-        raise HTTPException(status_code=503, detail="Price timeline data not available")
+    arrondissement: int | None = Query(None, ge=1, le=20, description="Filtrer par arrondissement"),
+    year_min: int | None = Query(None, ge=2014, le=2030),
+    year_max: int | None = Query(None, ge=2014, le=2030),
+    db: Session = Depends(get_db),
+) -> list[PriceTimeline]:
+    try:
+        conditions = ["1=1"]
+        params: dict = {}
 
-    if arrondissement:
-        df = df[df["arrondissement"] == arrondissement]
-        if df.empty:
-            raise HTTPException(status_code=404, detail=f"No data for arrondissement {arrondissement}")
+        if arrondissement:
+            conditions.append("arrondissement = :arr")
+            params["arr"] = arrondissement
+        if year_min:
+            conditions.append("year >= :ymin")
+            params["ymin"] = year_min
+        if year_max:
+            conditions.append("year <= :ymax")
+            params["ymax"] = year_max
 
-    # Sort by year
-    df = df.sort_values(["arrondissement", "year"])
+        where = " AND ".join(conditions)
+        rows = db.execute(
+            text(f"SELECT {_PRICE_COLS} FROM gold_price_timeline WHERE {where} ORDER BY arrondissement, year"),
+            params,
+        ).mappings().all()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
 
-    results = []
-    for _, row in df.iterrows():
-        results.append(PriceTimeline(
-            arrondissement=int(row["arrondissement"]),
-            year=int(row["year"]),
-            median_price=row.get("median_price"),
-            transaction_count=int(row.get("transaction_count", 0)),
-        ))
-    return results
+    if not rows:
+        detail = (
+            f"Aucune donnée de prix pour l'arrondissement {arrondissement}"
+            if arrondissement else "Table gold_price_timeline vide ou absente"
+        )
+        raise HTTPException(status_code=404, detail=detail)
+
+    return [_row_to_price(row) for row in rows]
 
 
 @router.get(
     "/arrondissement/{arrondissement}",
     response_model=list[PriceTimeline],
-    summary="Price history for one arrondissement",
-    description="Get historical median prices for a specific arrondissement (2014-2023).",
+    summary="Historique des prix d'un arrondissement",
+    description="Série temporelle complète pour un arrondissement spécifique (2014–présent).",
 )
-def get_arrondissement_price_history(arrondissement: int = Query(..., ge=1, le=20)):
-    """Fetch price history for a specific arrondissement."""
-    df = load_gold_table("price_timeline.parquet")
-    if df.empty:
-        raise HTTPException(status_code=503, detail="Price timeline data not available")
+def get_arrondissement_price_history(
+    arrondissement: int = Path(..., ge=1, le=20),
+    db: Session = Depends(get_db),
+) -> list[PriceTimeline]:
+    try:
+        rows = db.execute(
+            text(f"""
+                SELECT {_PRICE_COLS}
+                FROM gold_price_timeline
+                WHERE arrondissement = :arr
+                ORDER BY year
+            """),
+            {"arr": arrondissement},
+        ).mappings().all()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
 
-    df = df[df["arrondissement"] == arrondissement].sort_values("year")
-    if df.empty:
-        raise HTTPException(status_code=404, detail=f"No price data for arrondissement {arrondissement}")
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Aucune donnée de prix pour l'arrondissement {arrondissement}",
+        )
 
-    results = []
-    for _, row in df.iterrows():
-        results.append(PriceTimeline(
-            arrondissement=int(row["arrondissement"]),
-            year=int(row["year"]),
-            median_price=row.get("median_price"),
-            transaction_count=int(row.get("transaction_count", 0)),
-        ))
-    return results
+    return [_row_to_price(row) for row in rows]
+
+
+@router.get(
+    "/summary",
+    response_model=list[dict],
+    summary="Résumé statistique des prix par arrondissement",
+    description="Min, max, moyenne et dernière valeur connue par arrondissement.",
+)
+def get_price_summary(db: Session = Depends(get_db)) -> list[dict]:
+    try:
+        rows = db.execute(text("""
+            SELECT
+                arrondissement,
+                MIN(median_price)::real                 AS min_price,
+                MAX(median_price)::real                 AS max_price,
+                AVG(median_price)::real                 AS avg_price,
+                MAX(year)                               AS latest_year,
+                SUM(transaction_count)::int             AS total_transactions
+            FROM gold_price_timeline
+            WHERE median_price IS NOT NULL
+            GROUP BY arrondissement
+            ORDER BY arrondissement
+        """)).mappings().all()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
+
+    return [dict(row) for row in rows]

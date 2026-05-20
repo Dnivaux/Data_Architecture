@@ -1,73 +1,97 @@
 """
-/api/comparison/* routes – Compare two arrondissements.
+/api/comparison/* — Comparaison de deux arrondissements.
+Source : PostgreSQL table gold_arrondissement_summary.
 """
-from fastapi import APIRouter, HTTPException, Query
+from __future__ import annotations
 
-from api.dependencies import load_gold_table
-from api.schemas import ArrondissementComparison, ArrondissementScore
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from api.dependencies import get_db
+from api.routers.scores import _row_to_score
+from api.schemas import ArrondissementComparison
 
 router = APIRouter(prefix="/comparison", tags=["comparison"])
+
+_SCORE_COLS = """
+    arrondissement,
+    COALESCE(anime_score,         0)::real  AS anime_score,
+    COALESCE(calme_score,         0)::real  AS calme_score,
+    COALESCE(accessibilite_score, 0)::real  AS accessibilite_score,
+    connectivity_score,
+    mobility_score,
+    health_env_score,
+    tranquility_score,
+    livability_score,
+    COALESCE(bar_count,       0)::int   AS bar_count,
+    COALESCE(nightclub_count, 0)::int   AS nightclub_count,
+    COALESCE(park_count,      0)::int   AS park_count,
+    median_price,
+    social_housing_pct
+"""
 
 
 @router.get(
     "/",
     response_model=ArrondissementComparison,
-    summary="Compare two arrondissements",
-    description="Side-by-side comparison of livability scores and prices between two arrondissements.",
+    summary="Comparer deux arrondissements",
+    description=(
+        "Comparaison côte-à-côte des 7 scores de vivabilité et du prix médian "
+        "entre deux arrondissements parisiens."
+    ),
 )
 def compare_arrondissements(
-    a: int = Query(..., ge=1, le=20, description="First arrondissement"),
+    a: int = Query(..., ge=1, le=20, description="Premier arrondissement"),
     b: int = Query(..., ge=1, le=20, description="Second arrondissement"),
-):
-    """Compare two arrondissements."""
+    db: Session = Depends(get_db),
+) -> ArrondissementComparison:
     if a == b:
-        raise HTTPException(status_code=400, detail="Cannot compare an arrondissement with itself")
+        raise HTTPException(
+            status_code=400,
+            detail="Impossible de comparer un arrondissement avec lui-même",
+        )
 
-    df = load_gold_table("arrondissement_summary.parquet")
-    if df.empty:
-        raise HTTPException(status_code=503, detail="Score data not available")
+    try:
+        rows = db.execute(
+            text(f"""
+                SELECT {_SCORE_COLS}
+                FROM gold_arrondissement_summary
+                WHERE arrondissement IN (:a, :b)
+                ORDER BY arrondissement
+            """),
+            {"a": a, "b": b},
+        ).mappings().all()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
 
-    row_a = df[df["arrondissement"] == a]
-    row_b = df[df["arrondissement"] == b]
+    row_map = {int(r["arrondissement"]): r for r in rows}
 
-    if row_a.empty or row_b.empty:
-        raise HTTPException(status_code=404, detail="One or both arrondissements not found")
+    if a not in row_map or b not in row_map:
+        missing = [x for x in (a, b) if x not in row_map]
+        raise HTTPException(
+            status_code=404,
+            detail=f"Arrondissement(s) introuvable(s) : {missing}",
+        )
 
-    row_a = row_a.iloc[0]
-    row_b = row_b.iloc[0]
+    score_a = _row_to_score(row_map[a])
+    score_b = _row_to_score(row_map[b])
 
-    score_a = ArrondissementScore(
-        arrondissement=int(row_a["arrondissement"]),
-        anime_score=float(row_a.get("anime_score", 0)),
-        calme_score=float(row_a.get("calme_score", 0)),
-        accessibilite_score=float(row_a.get("accessibilite_score", 0)),
-        bar_count=int(row_a.get("bar_count", 0)),
-        nightclub_count=int(row_a.get("nightclub_count", 0)),
-        park_count=int(row_a.get("park_count", 0)),
-        median_price=row_a.get("median_price"),
-        social_housing_pct=row_a.get("social_housing_pct"),
+    # Différence de prix
+    price_diff: float | None = None
+    pa = row_map[a]["median_price"]
+    pb = row_map[b]["median_price"]
+    if pa is not None and pb is not None:
+        price_diff = round(float(pb) - float(pa), 2)
+
+    # Différence de vivabilité composite (livability_score en priorité, sinon moyenne des 3)
+    lv_a = score_a.livability_score or (
+        (score_a.anime_score + score_a.calme_score + score_a.accessibilite_score) / 3
     )
-
-    score_b = ArrondissementScore(
-        arrondissement=int(row_b["arrondissement"]),
-        anime_score=float(row_b.get("anime_score", 0)),
-        calme_score=float(row_b.get("calme_score", 0)),
-        accessibilite_score=float(row_b.get("accessibilite_score", 0)),
-        bar_count=int(row_b.get("bar_count", 0)),
-        nightclub_count=int(row_b.get("nightclub_count", 0)),
-        park_count=int(row_b.get("park_count", 0)),
-        median_price=row_b.get("median_price"),
-        social_housing_pct=row_b.get("social_housing_pct"),
+    lv_b = score_b.livability_score or (
+        (score_b.anime_score + score_b.calme_score + score_b.accessibilite_score) / 3
     )
-
-    # Compute diffs
-    price_diff = None
-    if row_a.get("median_price") and row_b.get("median_price"):
-        price_diff = float(row_b["median_price"]) - float(row_a["median_price"])
-
-    livability_a = (float(row_a.get("anime_score", 0)) + float(row_a.get("calme_score", 0)) + float(row_a.get("accessibilite_score", 0))) / 3
-    livability_b = (float(row_b.get("anime_score", 0)) + float(row_b.get("calme_score", 0)) + float(row_b.get("accessibilite_score", 0))) / 3
-    livability_diff = livability_b - livability_a
+    livability_diff = round(lv_b - lv_a, 2)
 
     return ArrondissementComparison(
         arrond_a=a,
@@ -77,3 +101,54 @@ def compare_arrondissements(
         price_diff=price_diff,
         livability_diff=livability_diff,
     )
+
+
+@router.get(
+    "/ranking",
+    response_model=list[dict],
+    summary="Classement des 20 arrondissements",
+    description=(
+        "Retourne le classement des arrondissements par livability_score décroissant. "
+        "Inclut les 7 scores + rang."
+    ),
+)
+def get_ranking(
+    score_field: str = Query(
+        "livability_score",
+        description="Champ de tri : livability_score | anime_score | calme_score | "
+                    "connectivity_score | mobility_score | health_env_score | tranquility_score",
+    ),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    _allowed = {
+        "livability_score", "anime_score", "calme_score", "accessibilite_score",
+        "connectivity_score", "mobility_score", "health_env_score", "tranquility_score",
+    }
+    if score_field not in _allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Champ de tri invalide. Valeurs acceptées : {sorted(_allowed)}",
+        )
+
+    try:
+        rows = db.execute(text(f"""
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY {score_field} DESC NULLS LAST) AS rang,
+                arrondissement,
+                nom_arrondissement,
+                ROUND(COALESCE(livability_score,   0)::numeric, 1) AS livability_score,
+                ROUND(COALESCE(anime_score,         0)::numeric, 1) AS anime_score,
+                ROUND(COALESCE(calme_score,         0)::numeric, 1) AS calme_score,
+                ROUND(COALESCE(accessibilite_score, 0)::numeric, 1) AS accessibilite_score,
+                ROUND(COALESCE(connectivity_score,  0)::numeric, 1) AS connectivity_score,
+                ROUND(COALESCE(mobility_score,      0)::numeric, 1) AS mobility_score,
+                ROUND(COALESCE(health_env_score,    0)::numeric, 1) AS health_env_score,
+                ROUND(COALESCE(tranquility_score,   0)::numeric, 1) AS tranquility_score,
+                median_price
+            FROM gold_indicator_scores
+            ORDER BY {score_field} DESC NULLS LAST
+        """)).mappings().all()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
+
+    return [dict(row) for row in rows]

@@ -1,15 +1,34 @@
-# Data & Processing
+# ============================================================
+# Data Architecture — Dépendances Python
+# ============================================================
+
+# --- Traitement données ---
 pandas>=2.0
 pyarrow>=14.0
+
+# --- Géospatial (Silver : jointures spatiales, Gold : géométries) ---
 geopandas>=0.14
 shapely>=2.0
 
-# HTTP & API
+# --- HTTP & APIs ---
 requests>=2.31
 urllib3>=2.0
+
+# --- API REST (exposition Gold) ---
 fastapi>=0.104
 uvicorn[standard]>=0.24
 pydantic>=2.0
 
-# Environment / secrets
+# --- Variables d'environnement ---
 python-dotenv>=1.0
+
+# --- Micro-batch mobilité (Vélib' + PRIM IDFM) ---
+schedule>=1.2
+
+# --- PostgreSQL (export Gold — critique pour évaluation) ---
+sqlalchemy>=2.0
+psycopg2-binary>=2.9        # driver PostgreSQL (binaire, sans compilation)
+# geoalchemy2>=0.14          # décommenter si PostGIS est installé (géométries natives)
+
+# --- Tests de charge (Locust) ---
+locust>=2.20
