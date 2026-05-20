@@ -24,11 +24,11 @@ _SCORE_COLS = """
     health_env_score,
     tranquility_score,
     livability_score,
-    COALESCE(bar_count,       0)::int   AS bar_count,
-    COALESCE(nightclub_count, 0)::int   AS nightclub_count,
-    COALESCE(park_count,      0)::int   AS park_count,
+    COALESCE(bar_count,        0)::int  AS bar_count,
+    COALESCE(nb_nightclubs,    0)::int  AS nightclub_count,
+    COALESCE(park_count,       0)::int  AS park_count,
     median_price,
-    social_housing_pct
+    NULL::real                          AS social_housing_pct
 """
 
 

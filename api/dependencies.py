@@ -139,6 +139,5 @@ def get_db_status() -> dict:
         "checked_in":     pool.checkedin(),
         "checked_out":    pool.checkedout(),
         "overflow":       pool.overflow(),
-        "invalid":        pool.invalid(),
         "database_url":   DATABASE_URL.split("@")[-1],  # masque les credentials
     }

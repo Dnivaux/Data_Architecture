@@ -1,0 +1,72 @@
+import { useState } from 'react';
+import DashboardLayout from './components/DashboardLayout';
+import { useScores } from './hooks/useScores';
+import { useLiveMetrics } from './hooks/useLiveMetrics';
+// useLiveMetrics poll /api/mobility/live toutes les 30s
+// Le badge vert pulse dès que le premier batch Bronze est lisible
+
+export default function App() {
+  const [selectedArrondissement, setSelectedArrondissement] = useState(null);
+  const [selectedIndicator, setSelectedIndicator] = useState('livability_score');
+
+  const { scores, indicators, scoreMap, indicatorMap, loading, error } = useScores();
+  const liveMetrics = useLiveMetrics();
+
+  if (loading) return <LoadingScreen />;
+  // Erreur fatale seulement si les deux endpoints ont échoué ET qu'on n'a aucune donnée
+  if (error && !scores.length && !indicators.length) return <ErrorScreen message={error} />;
+
+  return (
+    <DashboardLayout
+      selectedArrondissement={selectedArrondissement}
+      onSelectArrondissement={setSelectedArrondissement}
+      selectedIndicator={selectedIndicator}
+      onIndicatorChange={setSelectedIndicator}
+      scores={scores}
+      indicators={indicators}
+      scoreMap={scoreMap}
+      indicatorMap={indicatorMap}
+      liveMetrics={liveMetrics}
+    />
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div className="h-screen flex flex-col items-center justify-center gap-4">
+      <div className="text-4xl animate-bounce">🏙️</div>
+      <p className="text-slate-300 font-medium">Chargement des données Gold…</p>
+      <p className="text-slate-500 text-sm">Connexion à PostgreSQL via FastAPI</p>
+      <div className="flex gap-1 mt-2">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ErrorScreen({ message }) {
+  return (
+    <div className="h-screen flex flex-col items-center justify-center gap-4">
+      <span className="text-5xl">⚠️</span>
+      <p className="text-red-400 font-semibold text-lg">Impossible de joindre l'API</p>
+      <p className="text-slate-500 text-sm max-w-md text-center leading-relaxed">
+        {message}
+      </p>
+      <p className="text-slate-600 text-xs mt-2">
+        Vérifiez que FastAPI tourne sur <code className="text-indigo-400">localhost:8000</code>
+      </p>
+      <button
+        className="btn-primary mt-2"
+        onClick={() => window.location.reload()}
+      >
+        Réessayer
+      </button>
+    </div>
+  );
+}

@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.dependencies import get_db_status, verify_db_connection
-from api.routers import comparison, poi, prices, scores
+from api.routers import comparison, mobility, poi, prices, scores
 from api.schemas import HealthCheck, HealthCheckExtended
 
 # ---------------------------------------------------------------------------
@@ -154,6 +154,7 @@ app.include_router(scores.router,     prefix="/api")
 app.include_router(poi.router,        prefix="/api")
 app.include_router(prices.router,     prefix="/api")
 app.include_router(comparison.router, prefix="/api")
+app.include_router(mobility.router,   prefix="/api")
 
 # ---------------------------------------------------------------------------
 # Endpoints système

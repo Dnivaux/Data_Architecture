@@ -51,13 +51,10 @@ BATCH_INTERVAL_SECONDS: int = int(os.getenv("BATCH_INTERVAL_SECONDS", "60"))
 MAX_CONSECUTIVE_FAILURES: int = int(os.getenv("MAX_CONSECUTIVE_FAILURES", "5"))
 FAILURE_BACKOFF_SECONDS: int = int(os.getenv("FAILURE_BACKOFF_SECONDS", "300"))
 
-# Vélib' GBFS — données publiques, pas d'auth
-VELIB_STATION_INFO_URL = (
-    "https://velib-metropole-opendata.smoove.pro/opendata/Velo_V/gbfs/en/station_information.json"
-)
-VELIB_STATION_STATUS_URL = (
-    "https://velib-metropole-opendata.smoove.pro/opendata/Velo_V/gbfs/en/station_status.json"
-)
+# Vélib' — Paris OpenData Explore API v2.1 (données temps réel, sans auth)
+# Source : https://opendata.paris.fr/explore/dataset/velib-disponibilite-en-temps-reel
+_VELIB_OD_BASE = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/velib-disponibilite-en-temps-reel/records"
+VELIB_API_URL = _VELIB_OD_BASE  # pagination via offset/limit
 
 # PRIM IDFM — clé API optionnelle
 PRIM_API_KEY: Optional[str] = os.getenv("PRIM_API_KEY")
@@ -124,58 +121,53 @@ def _fetch_velib(session, logger) -> pd.DataFrame:
     complet avec disponibilité temps réel. Retourne un DataFrame vide si erreur.
     """
     batch_ts = datetime.now(timezone.utc)
+    rows: list[dict] = []
+    offset = 0
+    limit  = 100  # max par page autorisé par l'API Paris OD
 
-    # --- Station information (métadonnées statiques) ---
-    resp_info = session.get(VELIB_STATION_INFO_URL)
-    if resp_info.status_code != 200:
-        logger.warning("Vélib' station_information HTTP %d", resp_info.status_code)
-        return pd.DataFrame(columns=VELIB_BRONZE_COLUMNS)
-
-    stations_raw = resp_info.json().get("data", {}).get("stations", [])
-    info_map: dict[str, dict] = {s["station_id"]: s for s in stations_raw}
-
-    # --- Station status (données temps réel) ---
-    resp_status = session.get(VELIB_STATION_STATUS_URL)
-    if resp_status.status_code != 200:
-        logger.warning("Vélib' station_status HTTP %d", resp_status.status_code)
-        return pd.DataFrame(columns=VELIB_BRONZE_COLUMNS)
-
-    statuses = resp_status.json().get("data", {}).get("stations", [])
-
-    rows = []
-    for s in statuses:
-        sid = s.get("station_id", "")
-        info = info_map.get(sid, {})
-
-        lat = float(info.get("lat", 0.0))
-        lon = float(info.get("lon", 0.0))
-
-        # Vélib' GBFS v2 expose num_bikes_available_types
-        bikes_types = s.get("num_bikes_available_types", {})
-        mechanical = int(bikes_types.get("mechanical", s.get("num_bikes_available", 0)))
-        ebike = int(bikes_types.get("ebike", 0))
-        total_bikes = int(s.get("num_bikes_available", mechanical + ebike))
-
-        rows.append(
-            {
-                "station_code": str(sid),
-                "station_name": info.get("name", ""),
-                "arrondissement": _get_arrondissement(lat, lon),
-                "latitude": lat,
-                "longitude": lon,
-                "bikes_available": total_bikes,
-                "mechanical_bikes": mechanical,
-                "electric_bikes": ebike,
-                "docks_available": int(s.get("num_docks_available", 0)),
-                "total_capacity": int(info.get("capacity", 0)),
-                "is_renting": bool(s.get("is_renting", False)),
-                "is_returning": bool(s.get("is_returning", False)),
-                "batch_ts": batch_ts,
-            }
+    while True:
+        resp = session.get(
+            VELIB_API_URL,
+            params={"limit": limit, "offset": offset, "timezone": "UTC"},
+            timeout=15,
         )
+        if resp.status_code != 200:
+            logger.warning("Vélib' Paris OD HTTP %d (offset=%d)", resp.status_code, offset)
+            break
 
-    df = pd.DataFrame(rows, columns=VELIB_BRONZE_COLUMNS) if rows else pd.DataFrame(columns=VELIB_BRONZE_COLUMNS)
-    logger.info("Vélib' → %d stations collectées", len(df))
+        payload = resp.json()
+        stations = payload.get("results", [])
+        if not stations:
+            break
+
+        for s in stations:
+            geo  = s.get("coordonnees_geo") or {}
+            lat  = float(geo.get("lat", 0.0))
+            lon  = float(geo.get("lon", 0.0))
+
+            rows.append({
+                "station_code":    str(s.get("stationcode", "")),
+                "station_name":    s.get("name", ""),
+                "arrondissement":  _get_arrondissement(lat, lon),
+                "lat":             lat,
+                "lon":             lon,
+                "bikes_available": int(s.get("numbikesavailable", 0)),
+                "mechanical_bikes":int(s.get("mechanical", 0)),
+                "electric_bikes":  int(s.get("ebike", 0)),
+                "docks_available": int(s.get("numdocksavailable", 0)),
+                "total_capacity":  int(s.get("capacity", 0)),
+                "is_renting":      s.get("is_renting", "OUI") == "OUI",
+                "is_returning":    s.get("is_returning", "OUI") == "OUI",
+                "batch_ts":        batch_ts,
+            })
+
+        total = payload.get("total_count", 0)
+        offset += limit
+        if offset >= total:
+            break
+
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=VELIB_BRONZE_COLUMNS)
+    logger.info("Vélib' Paris OD → %d stations collectées", len(df))
     return df
 
 
