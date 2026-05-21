@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_db
@@ -21,8 +22,23 @@ def _row_to_price(row) -> PriceTimeline:
         arrondissement=int(row["arrondissement"]),
         year=int(row["year"]),
         median_price=float(row["median_price"]) if row["median_price"] is not None else None,
-        transaction_count=int(row["transaction_count"]),
+        transaction_count=int(row["transaction_count"] or 0),
     )
+
+
+def _handle_db_exc(exc: Exception, context: str) -> None:
+    """Convertit les exceptions SQLAlchemy en HTTPException explicites."""
+    msg = str(exc)
+    if isinstance(exc, ProgrammingError) and (
+        "does not exist" in msg or "relation" in msg or "column" in msg
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Table ou colonne manquante ({context}) — pipeline Gold non exécuté ?",
+        )
+    if isinstance(exc, OperationalError):
+        raise HTTPException(status_code=503, detail=f"PostgreSQL injoignable ({context})")
+    raise HTTPException(status_code=500, detail=f"Erreur SQL inattendue ({context}) : {exc}")
 
 
 @router.get(
@@ -60,7 +76,7 @@ def get_price_timeline(
             params,
         ).mappings().all()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
+        _handle_db_exc(exc, "GET /prices/timeline")
 
     if not rows:
         detail = (
@@ -93,7 +109,7 @@ def get_arrondissement_price_history(
             {"arr": arrondissement},
         ).mappings().all()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
+        _handle_db_exc(exc, f"GET /prices/arrondissement/{arrondissement}")
 
     if not rows:
         raise HTTPException(
@@ -126,6 +142,6 @@ def get_price_summary(db: Session = Depends(get_db)) -> list[dict]:
             ORDER BY arrondissement
         """)).mappings().all()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
+        _handle_db_exc(exc, "GET /prices/summary")
 
     return [dict(row) for row in rows]

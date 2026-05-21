@@ -1,9 +1,7 @@
-import { useState } from 'react';
+import { useState, Component } from 'react';
 import DashboardLayout from './components/DashboardLayout';
 import { useScores } from './hooks/useScores';
 import { useLiveMetrics } from './hooks/useLiveMetrics';
-// useLiveMetrics poll /api/mobility/live toutes les 30s
-// Le badge vert pulse dès que le premier batch Bronze est lisible
 
 export default function App() {
   const [selectedArrondissement, setSelectedArrondissement] = useState(null);
@@ -13,22 +11,53 @@ export default function App() {
   const liveMetrics = useLiveMetrics();
 
   if (loading) return <LoadingScreen />;
-  // Erreur fatale seulement si les deux endpoints ont échoué ET qu'on n'a aucune donnée
   if (error && !scores.length && !indicators.length) return <ErrorScreen message={error} />;
 
   return (
-    <DashboardLayout
-      selectedArrondissement={selectedArrondissement}
-      onSelectArrondissement={setSelectedArrondissement}
-      selectedIndicator={selectedIndicator}
-      onIndicatorChange={setSelectedIndicator}
-      scores={scores}
-      indicators={indicators}
-      scoreMap={scoreMap}
-      indicatorMap={indicatorMap}
-      liveMetrics={liveMetrics}
-    />
+    <AppErrorBoundary>
+      <DashboardLayout
+        selectedArrondissement={selectedArrondissement}
+        onSelectArrondissement={setSelectedArrondissement}
+        selectedIndicator={selectedIndicator}
+        onIndicatorChange={setSelectedIndicator}
+        scores={scores}
+        indicators={indicators}
+        scoreMap={scoreMap}
+        indicatorMap={indicatorMap}
+        liveMetrics={liveMetrics}
+      />
+    </AppErrorBoundary>
   );
+}
+
+class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, message: null };
+  }
+
+  static getDerivedStateFromError(err) {
+    return { hasError: true, message: err?.message ?? 'Erreur inconnue' };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-screen flex flex-col items-center justify-center gap-4">
+          <span className="text-5xl">⚠️</span>
+          <p className="text-red-400 font-semibold text-lg">Erreur d'affichage</p>
+          <p className="text-slate-500 text-sm max-w-md text-center">{this.state.message}</p>
+          <button
+            className="btn-primary mt-2"
+            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+          >
+            Recharger
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function LoadingScreen() {

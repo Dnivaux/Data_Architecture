@@ -11,7 +11,7 @@ import { api } from '../api/client';
  * En mode comparaison, superpose 2 arrondissements sur le radar.
  */
 export default function AnalyticsPanel({ selectedArrondissement, indicatorData, scoreData }) {
-  const { prices, loading: pricesLoading } = usePrices(selectedArrondissement);
+  const { prices, loading: pricesLoading, error: pricesError } = usePrices(selectedArrondissement);
   const [compareWith, setCompareWith] = useState('');
   const [comparisonScore, setComparisonScore] = useState(null);
   const [comparing, setComparing] = useState(false);
@@ -88,7 +88,17 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
 
       {/* Prix DVF */}
       <div className="card">
-        <PriceLineChart prices={prices} loading={pricesLoading} />
+        {pricesError && !pricesLoading ? (
+          <div className="h-40 flex flex-col items-center justify-center gap-2">
+            <span className="text-slate-500 text-xs uppercase tracking-wide">Prix médian DVF</span>
+            <span className="text-amber-500/80 text-xs text-center leading-relaxed">
+              Données indisponibles<br />
+              <span className="text-slate-600">(table Gold non peuplée)</span>
+            </span>
+          </div>
+        ) : (
+          <PriceLineChart prices={prices} loading={pricesLoading} />
+        )}
       </div>
 
       {/* Métriques brutes (si arrondissement sélectionné) */}

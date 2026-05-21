@@ -260,6 +260,8 @@ def build_mobility_silver(
 
     # --- Vélib' (cas 2 : sjoin lat/lon) ---
     df_vel = read_parquet("velib")
+    # Normalise les noms de colonnes (anciens fichiers utilisaient lat/lon)
+    df_vel = df_vel.rename(columns={"lat": "latitude", "lon": "longitude"}, errors="ignore")
     if not df_vel.empty and {"latitude", "longitude"}.issubset(df_vel.columns):
         df_vel = _sjoin_to_arrondissement(
             df_vel, "latitude", "longitude", boundaries_gdf, log

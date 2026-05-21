@@ -8,7 +8,7 @@ import { fmtPrice, fmtPct, fmtScoreShort, fmtInt } from '../utils/formatters';
  * Si `liveData` est fourni, les cartes Mobilité pulsent en vert.
  */
 export default function KPIGrid({ data, liveData, onIndicatorClick }) {
-  if (!data) return <KPISkeleton />;
+  if (!data) return <KPISkeleton loading={true} />;
 
   const d = data;
   const mobilityLive = liveData?.isLive ?? false;
@@ -78,14 +78,17 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
   );
 }
 
-function KPISkeleton() {
+function KPISkeleton({ loading = false }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="card animate-pulse">
+        <div key={i} className={`card ${loading ? 'animate-pulse' : ''}`}>
           <div className="h-3 bg-slate-700 rounded w-2/3 mb-3" />
           <div className="h-7 bg-slate-700 rounded w-1/2 mb-2" />
           <div className="h-2 bg-slate-700 rounded w-full" />
+          {!loading && i === 0 && (
+            <p className="text-xs text-slate-600 mt-2">Aucune donnée</p>
+          )}
         </div>
       ))}
     </div>
