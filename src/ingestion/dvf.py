@@ -241,6 +241,8 @@ def _detect_csv_format(csv_path: str) -> tuple[str, str]:
 def ingest(
     csv_path: str | Path | None = None,
     postal_codes: list[str] | None = None,
+    date_min: str | None = None,
+    date_max: str | None = None,
 ) -> pd.DataFrame:
     """
     Ingère les transactions DVF parisiennes depuis le fichier CSV local.
@@ -252,6 +254,10 @@ def ingest(
     postal_codes : list[str], optional
         Filtre optionnel sur les codes postaux (ex. ["75001", "75008"]).
         Par défaut : tous les arrondissements parisiens.
+    date_min : str, optional
+        Ignoré pour le CSV local (gardé pour compatibilité pipeline).
+    date_max : str, optional
+        Ignoré pour le CSV local (gardé pour compatibilité pipeline).
 
     Returns
     -------

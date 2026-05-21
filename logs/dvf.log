@@ -274,3 +274,22 @@
 2026-05-21T10:40:35 [DEBUG] dvf —   Chunk 100 — lus : 20000000 | conservés Paris : 152135
 2026-05-21T10:40:36 [INFO] dvf — DVF ingestion : 20382915 lignes nationales lues → 189609 transactions parisiennes conservées
 2026-05-21T10:40:36 [INFO] dvf — Parquet sauvegardé → /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/dvf_clean/date=2026-05-21/part-0.parquet
+2026-05-21T13:59:16 [INFO] dvf — DVF ingestion locale démarrée — source : /home/beuhnny/Mast_DE/ProjetDataArchitect/Data_Architecture/data/bronze/dvf/dvf.csv
+2026-05-21T13:59:16 [INFO] dvf — Taille fichier : 3382.2 Mo
+2026-05-21T13:59:21 [DEBUG] dvf —   Chunk 10 — lus : 2000000 | conservés Paris : 0
+2026-05-21T13:59:26 [DEBUG] dvf —   Chunk 20 — lus : 4000000 | conservés Paris : 0
+2026-05-21T13:59:31 [DEBUG] dvf —   Chunk 30 — lus : 6000000 | conservés Paris : 40472
+2026-05-21T13:59:46 [INFO] dvf — DVF ingestion locale démarrée — source : /home/beuhnny/Mast_DE/ProjetDataArchitect/Data_Architecture/data/bronze/dvf/dvf.csv
+2026-05-21T13:59:46 [INFO] dvf — Taille fichier : 3382.2 Mo
+2026-05-21T13:59:51 [DEBUG] dvf —   Chunk 10 — lus : 2000000 | conservés Paris : 0
+2026-05-21T13:59:56 [DEBUG] dvf —   Chunk 20 — lus : 4000000 | conservés Paris : 0
+2026-05-21T14:00:01 [DEBUG] dvf —   Chunk 30 — lus : 6000000 | conservés Paris : 40472
+2026-05-21T14:00:07 [DEBUG] dvf —   Chunk 40 — lus : 8000000 | conservés Paris : 40472
+2026-05-21T14:00:12 [DEBUG] dvf —   Chunk 50 — lus : 10000000 | conservés Paris : 83627
+2026-05-21T14:00:17 [DEBUG] dvf —   Chunk 60 — lus : 12000000 | conservés Paris : 83627
+2026-05-21T14:00:22 [DEBUG] dvf —   Chunk 70 — lus : 14000000 | conservés Paris : 118866
+2026-05-21T14:00:27 [DEBUG] dvf —   Chunk 80 — lus : 16000000 | conservés Paris : 118866
+2026-05-21T14:00:31 [DEBUG] dvf —   Chunk 90 — lus : 18000000 | conservés Paris : 152135
+2026-05-21T14:00:36 [DEBUG] dvf —   Chunk 100 — lus : 20000000 | conservés Paris : 152135
+2026-05-21T14:00:37 [INFO] dvf — DVF ingestion : 20382915 lignes nationales lues → 189609 transactions parisiennes conservées
+2026-05-21T14:00:37 [INFO] dvf — Parquet sauvegardé → /home/beuhnny/Mast_DE/ProjetDataArchitect/Data_Architecture/data/bronze/dvf_clean/date=2026-05-21/part-0.parquet

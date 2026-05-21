@@ -16,3 +16,6 @@
 2026-05-21T11:10:30 [INFO] boundaries — Boundaries ingestion started
 2026-05-21T11:10:30 [INFO] boundaries — Raw GeoJSON saved → /home/beuhnny/Mast_DE/ProjetDataArchitect/Data_Architecture/data/bronze/boundaries/arrondissements.geojson
 2026-05-21T11:10:30 [INFO] boundaries — Saved 20 arrondissements → /home/beuhnny/Mast_DE/ProjetDataArchitect/Data_Architecture/data/bronze/boundaries/part-0.parquet
+2026-05-21T14:11:25 [INFO] boundaries — Boundaries ingestion started
+2026-05-21T14:11:25 [INFO] boundaries — Raw GeoJSON saved → /home/beuhnny/Mast_DE/ProjetDataArchitect/Data_Architecture/data/bronze/boundaries/arrondissements.geojson
+2026-05-21T14:11:25 [INFO] boundaries — Saved 20 arrondissements → /home/beuhnny/Mast_DE/ProjetDataArchitect/Data_Architecture/data/bronze/boundaries/part-0.parquet
