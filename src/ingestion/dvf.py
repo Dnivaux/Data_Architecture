@@ -158,6 +158,86 @@ def _clean_chunk(chunk: pd.DataFrame, ingested_at: datetime) -> pd.DataFrame:
 # Point d'entrée principal
 # ---------------------------------------------------------------------------
 
+def _normalize_col(name: str) -> str:
+    text = unicodedata.normalize("NFKD", str(name))
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = text.strip().lower()
+    text = "".join(ch if ch.isalnum() else "_" for ch in text)
+    while "__" in text:
+        text = text.replace("__", "_")
+    return text.strip("_")
+
+
+COLUMN_ALIASES = {
+    "id_mutation": "id_mutation",
+    "date_mutation": "date_mutation",
+    "valeur_fonciere": "valeur_fonciere",
+    "adresse_numero": "adresse_numero",
+    "adresse_nom_voie": "adresse_nom_voie",
+    "code_postal": "code_postal",
+    "code_commune": "code_commune",
+    "nom_commune": "nom_commune",
+    "code_departement": "code_departement",
+    "type_local": "type_local",
+    "surface_reelle_bati": "surface_reelle_bati",
+    "surface_terrain": "surface_terrain",
+    "nombre_pieces_principales": "nombre_pieces_principales",
+    "latitude": "latitude",
+    "longitude": "longitude",
+    "nature_mutation": "nature_mutation",
+    # Common DVF CSV labels
+    "id_mutation": "id_mutation",
+    "date_mutation": "date_mutation",
+    "valeur_fonciere": "valeur_fonciere",
+    "adresse_numero": "adresse_numero",
+    "adresse_nom_voie": "adresse_nom_voie",
+    "code_postal": "code_postal",
+    "code_commune": "code_commune",
+    "nom_commune": "nom_commune",
+    "code_departement": "code_departement",
+    "type_local": "type_local",
+    "surface_reelle_bati": "surface_reelle_bati",
+    "surface_terrain": "surface_terrain",
+    "nombre_pieces_principales": "nombre_pieces_principales",
+    "latitude": "latitude",
+    "longitude": "longitude",
+    "nature_mutation": "nature_mutation",
+    # Variants with spaces/accents
+    "valeur_fonciere_euros": "valeur_fonciere",
+    "surface_reelle_bati_m2": "surface_reelle_bati",
+    "surface_terrain_m2": "surface_terrain",
+    "nombre_pieces_principales": "nombre_pieces_principales",
+    "adresse_nom_voie": "adresse_nom_voie",
+    "adresse_numero": "adresse_numero",
+    "nature_mutation": "nature_mutation",
+}
+
+
+def _normalize_postal(series: pd.Series) -> pd.Series:
+    values = series.astype(str).str.replace(r"\.0$", "", regex=True)
+    return values.str.zfill(5)
+
+
+def _detect_csv_format(csv_path: str) -> tuple[str, str]:
+    with open(csv_path, "rb") as handle:
+        sample = handle.read(65536)
+    try:
+        text = sample.decode("utf-8")
+        encoding = "utf-8"
+    except UnicodeDecodeError:
+        text = sample.decode("latin1")
+        encoding = "latin1"
+
+    sniffer = csv.Sniffer()
+    try:
+        dialect = sniffer.sniff(text, delimiters=[",", ";", "\t", "|"])
+        sep = dialect.delimiter
+    except csv.Error:
+        sep = ";" if ";" in text else ","
+
+    return sep, encoding
+
+
 def ingest(
     csv_path: str | Path | None = None,
     postal_codes: list[str] | None = None,
@@ -249,3 +329,129 @@ def ingest(
     logger.info("Parquet sauvegardé → %s", path)
 
     return df
+
+
+def ingest_from_csv(
+    csv_path: str,
+    chunksize: int = 200_000,
+    date_value: str | None = None,
+    encoding: str | None = None,
+    sep: str | None = None,
+) -> None:
+    """
+    Stream a large DVF CSV and write Parquet partitions per arrondissement.
+
+    The CSV is processed in chunks to avoid loading the full file into memory.
+    Only Paris (postal codes 75001–75020) is kept.
+    """
+    logger = get_logger("dvf", LOG_DIR)
+    csv_path = os.path.abspath(csv_path)
+    run_date = date_value or date.today().isoformat()
+    ingested_at = datetime.now(timezone.utc)
+
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(csv_path)
+
+    logger.info("DVF CSV ingestion started — %s", csv_path)
+
+    if sep is None or encoding is None:
+        detected_sep, detected_encoding = _detect_csv_format(csv_path)
+        sep = sep or detected_sep
+        encoding = encoding or detected_encoding
+
+    logger.info("DVF CSV format — sep=%s encoding=%s", sep, encoding)
+
+    # Read header only to align columns without loading the full file.
+    header = pd.read_csv(csv_path, nrows=0, encoding=encoding, sep=sep)
+    csv_cols = header.columns.tolist()
+    logger.debug("DVF CSV columns: %s", csv_cols)
+
+    out_dir = BRONZE_ROOT / "dvf" / f"date={run_date}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    writers: dict[int, pq.ParquetWriter] = {}
+    schema: pa.Schema | None = None
+
+    def get_writer(arrond: int) -> pq.ParquetWriter:
+        nonlocal schema
+        if arrond in writers:
+            return writers[arrond]
+        out_path = out_dir / f"arrond_{arrond:02d}.parquet"
+        writer = pq.ParquetWriter(out_path, schema)
+        writers[arrond] = writer
+        return writer
+
+    for chunk in pd.read_csv(
+        csv_path,
+        chunksize=chunksize,
+        encoding=encoding,
+        sep=sep,
+        low_memory=False,
+    ):
+        # Normalize column names to canonical schema.
+        rename_map = {}
+        for col in chunk.columns:
+            norm = _normalize_col(col)
+            if norm in COLUMN_ALIASES:
+                rename_map[col] = COLUMN_ALIASES[norm]
+        if rename_map:
+            chunk = chunk.rename(columns=rename_map)
+
+        # Keep only needed columns when present.
+        for col in BRONZE_COLUMNS:
+            if col not in chunk.columns:
+                chunk[col] = None
+
+        chunk = chunk[BRONZE_COLUMNS]
+
+        # Filter Paris postal codes.
+        postal = _normalize_postal(chunk["code_postal"])
+        chunk = chunk[postal.str.startswith("750")]
+        if chunk.empty:
+            continue
+
+        chunk["valeur_fonciere"] = pd.to_numeric(chunk["valeur_fonciere"].astype(str).str.replace(",", "."), errors="coerce")
+        chunk["surface_reelle_bati"] = pd.to_numeric(chunk["surface_reelle_bati"].astype(str).str.replace(",", "."), errors="coerce")
+        chunk["surface_terrain"] = pd.to_numeric(chunk["surface_terrain"].astype(str).str.replace(",", "."), errors="coerce")
+        chunk["nombre_pieces_principales"] = pd.to_numeric(chunk["nombre_pieces_principales"], errors="coerce")
+        chunk["date_mutation"] = pd.to_datetime(chunk["date_mutation"], errors="coerce")
+        chunk["ingested_at"] = ingested_at
+
+        if schema is None:
+            schema = pa.Schema.from_pandas(chunk, preserve_index=False)
+
+        postal = _normalize_postal(chunk["code_postal"])
+        for arrond, group in chunk.groupby(postal.str[-2:]):
+            if not arrond.isdigit():
+                continue
+            writer = get_writer(int(arrond))
+            table = pa.Table.from_pandas(group, schema=schema, preserve_index=False)
+            writer.write_table(table)
+
+    for writer in writers.values():
+        writer.close()
+
+    logger.info("DVF CSV ingestion complete — %d arrondissement files", len(writers))
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Ingest DVF data.")
+    parser.add_argument("--csv", dest="csv_path", help="Path to DVF CSV to convert")
+    parser.add_argument("--chunksize", type=int, default=200_000)
+    parser.add_argument("--date", dest="date_value", default=None)
+    parser.add_argument("--encoding", default=None)
+    parser.add_argument("--sep", default=None)
+    args = parser.parse_args()
+
+    if args.csv_path:
+        ingest_from_csv(
+            args.csv_path,
+            chunksize=args.chunksize,
+            date_value=args.date_value,
+            encoding=args.encoding,
+            sep=args.sep,
+        )
+    else:
+        ingest()
