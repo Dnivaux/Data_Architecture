@@ -84,10 +84,28 @@ def get_live_mobility() -> dict:
             detail=f"Schéma Bronze inattendu — colonnes manquantes : {required_cols - set(df.columns)}",
         )
 
-    # Filtre les stations hors Paris (arrondissement non-entier : "Hors Paris", NaN, etc.)
-    import pandas as pd
-    df["_arr_int"] = pd.to_numeric(df["arrondissement"], errors="coerce")
-    df = df[df["_arr_int"].between(1, 20)].copy()
+    # Extrait l'entier depuis des valeurs comme "Paris 16e", "Paris 8e" ou entiers directs.
+    # "Hors Paris" et valeurs non parsables sont supprimées.
+    import re as _re
+
+    def _parse_arr(val):
+        if val is None:
+            return None
+        try:
+            if pd.isna(val):
+                return None
+        except (TypeError, ValueError):
+            pass
+        m = _re.search(r'\d+', str(val))
+        if not m:
+            return None
+        n = int(m.group())
+        return n if 1 <= n <= 20 else None
+
+    df["_arr_int"] = df["arrondissement"].apply(_parse_arr)
+    _logger.info("Valeurs arrondissement avant filtre : %s", df["arrondissement"].value_counts().to_dict())
+    _logger.info("Nb lignes après extraction entier : %d / %d", df["_arr_int"].notna().sum(), len(df))
+    df = df[df["_arr_int"].notna()].copy()
     df["arrondissement"] = df["_arr_int"].astype(int)
     df = df.drop(columns=["_arr_int"])
 
