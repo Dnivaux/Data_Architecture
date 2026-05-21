@@ -252,142 +252,202 @@ def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Source 1 — ARCEP Mon Réseau Mobile
+# Source 1 — ARCEP Mon Réseau Mobile (sites géolocalisés → jointure spatiale)
 # ---------------------------------------------------------------------------
+# Le fichier ARCEP sites mobiles liste les antennes avec latitude/longitude.
+# Paris est codée comme "75056" (pas par arrondissement). On fait une jointure
+# spatiale pour assigner chaque antenne à un arrondissement, puis on compte
+# les sites 4G/5G par opérateur et arrondissement comme indicateur de densité réseau.
 
-# Variantes de noms de colonnes observées selon le millésime du fichier ARCEP
-_MOBILE_CODE_VARIANTS = ["code_commune", "code_insee", "CODGEO", "Code_commune_INSEE",
-                          "code_commune_insee", "x_com", "COM"]
-_MOBILE_OP_VARIANTS   = ["operateur", "OPERATEUR", "Operateur", "operator"]
-_MOBILE_4G_VARIANTS   = ["4G", "couverture_4G", "4g", "COUVR_4G", "Zone_4G", "ZONE_4G",
-                          "4g_couverture", "couv_4g"]
-_MOBILE_5G_VARIANTS   = ["5G", "couverture_5G", "5g", "COUVR_5G", "Zone_5G", "ZONE_5G",
-                          "5g_couverture", "couv_5g"]
-_MOBILE_PCT4G_VARIANTS = ["pct_pop_4g", "pourcentage_4g", "taux_4g", "pop_couv_4g"]
-_MOBILE_PCT5G_VARIANTS = ["pct_pop_5g", "pourcentage_5g", "taux_5g", "pop_couv_5g"]
-_MOBILE_PERIODE_VARIANTS = ["periode", "trimestre", "TRIMESTRE", "annee", "année", "date"]
+_ARCEP_SITES_BASE = "https://data.arcep.fr/mobile/sites/"
+
+_OP_NORMALIZE = {
+    "orange": "orange",
+    "sfr": "sfr",
+    "bouygues telecom": "bouygues",
+    "free mobile": "free",
+    "free": "free",
+    "bouygues": "bouygues",
+}
 
 
 def _fetch_arcep_mobile(
     session: Any, logger: Any, ingested_at: datetime, run_date: str
 ) -> pd.DataFrame:
-    url = _discover_resource_url(
-        session, logger, ARCEP_MOBILE_SLUG,
-        preferred_formats=("csv", "zip"),
-        fallback_url=ARCEP_MOBILE_FALLBACK,
-        keywords="Mon Réseau Mobile ARCEP couverture 4G 5G communes",
-    )
-    raw = _download_bytes(session, logger, url)
+    import geopandas as gpd
+
+    # Découvrir le dernier trimestre disponible
+    try:
+        resp = session.get(_ARCEP_SITES_BASE)
+        trimestres = sorted(
+            [t.split("/")[0] for t in __import__("re").findall(r'href="(\d{4}_T\d/index\.html)"', resp.text)],
+            reverse=True
+        )
+        dernierT = trimestres[0] if trimestres else "2025_T4"
+    except Exception:
+        dernierT = "2025_T4"
+
+    url_csv = f"{_ARCEP_SITES_BASE}{dernierT}/{ dernierT}_sites_Metropole.csv"
+    logger.info("ARCEP sites mobiles : %s (trimestre %s)", url_csv, dernierT)
+
+    raw = _download_bytes(session, logger, url_csv)
     if raw is None:
         return pd.DataFrame(columns=COLS_MOBILE)
 
-    df_raw = _bytes_to_df(raw, logger)
-    if df_raw.empty:
+    try:
+        df_sites = pd.read_csv(io.BytesIO(raw), sep=";", low_memory=False)
+    except Exception as exc:
+        logger.error("Erreur lecture CSV sites mobiles : %s", exc)
         return pd.DataFrame(columns=COLS_MOBILE)
 
-    logger.info("ARCEP mobile brut : %d × %d", *df_raw.shape)
+    logger.info("Sites mobiles bruts : %d lignes", len(df_sites))
 
-    # Détection flexible des colonnes
-    col_code   = _find_col(df_raw, _MOBILE_CODE_VARIANTS)
-    col_op     = _find_col(df_raw, _MOBILE_OP_VARIANTS)
-    col_4g     = _find_col(df_raw, _MOBILE_4G_VARIANTS)
-    col_5g     = _find_col(df_raw, _MOBILE_5G_VARIANTS)
-    col_pct4g  = _find_col(df_raw, _MOBILE_PCT4G_VARIANTS)
-    col_pct5g  = _find_col(df_raw, _MOBILE_PCT5G_VARIANTS)
-    col_period = _find_col(df_raw, _MOBILE_PERIODE_VARIANTS)
-
-    if not col_code:
-        logger.error("Colonne code commune introuvable dans ARCEP mobile. Colonnes : %s", list(df_raw.columns)[:15])
-        return pd.DataFrame(columns=COLS_MOBILE)
-
-    # Filtre Paris
-    df_paris = df_raw[df_raw[col_code].astype(str).str.strip().isin(PARIS_CODES)].copy()
-    logger.info("ARCEP mobile Paris : %d lignes", len(df_paris))
-
+    # Filtrer Paris (code INSEE = 75056)
+    df_paris = df_sites[df_sites["insee_com"].astype(str) == "75056"].copy()
     if df_paris.empty:
-        logger.warning("Aucune commune parisienne trouvée — vérifier le format du fichier ARCEP mobile")
+        logger.warning("Aucun site Paris (75056) — CSV vide ou format inattendu")
         return pd.DataFrame(columns=COLS_MOBILE)
 
-    def _to_bool(series: pd.Series) -> pd.Series:
-        """Convertit 0/1, 'oui'/'non', True/False en bool."""
-        s = series.astype(str).str.strip().str.lower()
-        return s.isin(["1", "oui", "true", "vrai", "o", "yes"])
+    logger.info("Sites Paris : %d antennes", len(df_paris))
 
-    rows = pd.DataFrame({
-        "commune_code":  df_paris[col_code].astype(str).str.strip(),
-        "arrondissement": df_paris[col_code].astype(str).str.strip().str[-2:].astype(int),
-        "operateur":     df_paris[col_op].astype(str).str.lower() if col_op else "inconnu",
-        "has_4g":        _to_bool(df_paris[col_4g]) if col_4g else False,
-        "has_5g":        _to_bool(df_paris[col_5g]) if col_5g else False,
-        "pct_pop_4g":    pd.to_numeric(df_paris[col_pct4g], errors="coerce") if col_pct4g else float("nan"),
-        "pct_pop_5g":    pd.to_numeric(df_paris[col_pct5g], errors="coerce") if col_pct5g else float("nan"),
-        "periode":       df_paris[col_period].astype(str) if col_period else run_date,
-        "ingested_at":   ingested_at,
-    })
+    # Nettoyer latitude/longitude (format français : virgule décimale)
+    for col_ll in ("latitude", "longitude"):
+        df_paris[col_ll] = (
+            df_paris[col_ll].astype(str).str.replace(",", ".").pipe(pd.to_numeric, errors="coerce")
+        )
+    df_paris = df_paris.dropna(subset=["latitude", "longitude"])
 
-    return rows[COLS_MOBILE].reset_index(drop=True)
+    # Jointure spatiale avec les boundaries des arrondissements
+    try:
+        from src.ingestion.base import read_parquet
+        boundaries = read_parquet("boundaries")
+        geom_col = "geometry_wkt" if "geometry_wkt" in boundaries.columns else "geometry"
+        bounds_gdf = gpd.GeoDataFrame(
+            boundaries[["arrondissement"]],
+            geometry=gpd.GeoSeries.from_wkt(boundaries[geom_col]),
+            crs="EPSG:4326",
+        )
+        sites_gdf = gpd.GeoDataFrame(
+            df_paris,
+            geometry=gpd.points_from_xy(df_paris["longitude"], df_paris["latitude"]),
+            crs="EPSG:4326",
+        )
+        joined = gpd.sjoin(sites_gdf, bounds_gdf, how="left", predicate="within")
+        df_paris = pd.DataFrame(joined)
+    except Exception as exc:
+        logger.warning("Jointure spatiale échouée (%s) — arrondissement non disponible", exc)
+        df_paris["arrondissement"] = None
+
+    if "arrondissement" not in df_paris.columns or df_paris["arrondissement"].isna().all():
+        logger.warning("Arrondissement non assigné — données mobile insuffisantes")
+        return pd.DataFrame(columns=COLS_MOBILE)
+
+    df_paris = df_paris.dropna(subset=["arrondissement"])
+    df_paris["arrondissement"] = df_paris["arrondissement"].astype(int)
+
+    # Normaliser le nom de l'opérateur
+    df_paris["operateur"] = df_paris["nom_op"].astype(str).str.lower().map(
+        lambda x: _OP_NORMALIZE.get(x, x.split()[0] if x else "inconnu")
+    )
+
+    # Compter les sites 4G et 5G par opérateur × arrondissement
+    df_paris["site_4g"] = pd.to_numeric(df_paris["site_4g"], errors="coerce").fillna(0).astype(int)
+    df_paris["site_5g"] = pd.to_numeric(df_paris["site_5g"], errors="coerce").fillna(0).astype(int)
+
+    counts = (
+        df_paris.groupby(["arrondissement", "operateur"])
+        .agg(sites_4g=("site_4g", "sum"), sites_5g=("site_5g", "sum"))
+        .reset_index()
+    )
+
+    # Calculer les % relatifs par rapport au total par arrondissement
+    total_4g = counts.groupby("arrondissement")["sites_4g"].sum().rename("total_4g")
+    total_5g = counts.groupby("arrondissement")["sites_5g"].sum().rename("total_5g")
+    counts = counts.join(total_4g, on="arrondissement").join(total_5g, on="arrondissement")
+
+    counts["pct_pop_4g"] = (counts["sites_4g"] / counts["total_4g"] * 100).round(1).fillna(0)
+    counts["pct_pop_5g"] = (counts["sites_5g"] / counts["total_5g"] * 100).round(1).fillna(0)
+    counts["has_4g"]     = counts["sites_4g"] > 0
+    counts["has_5g"]     = counts["sites_5g"] > 0
+    counts["commune_code"] = "75056"
+    counts["periode"]    = dernierT
+    counts["ingested_at"] = ingested_at
+
+    return counts[COLS_MOBILE].reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------
-# Source 2 — ARCEP Déploiements Fibre
+# Source 2 — ARCEP Déploiements Fibre (Shapefile communes 2025T4)
 # ---------------------------------------------------------------------------
+# Source : shapefile ZIP "2025T4-Commune" sur data.gouv.fr
+# Colonnes utiles : INSEE_COM, Locaux (total), ftth (locaux éligibles FTTH)
+# pct_eligible_ftth = ftth / Locaux × 100  (valeurs réelles par arrondissement)
 
-_FIBRE_CODE_VARIANTS    = ["code_commune", "code_insee", "CODGEO", "code_commune_insee",
-                            "CodeINSEE", "code_dep_com"]
-_FIBRE_FTTH_VARIANTS    = ["nb_local_ftth", "locaux_ftth", "nb_locaux_ftth", "locaux_eligibles_ftth",
-                            "ftth_locaux", "locaux_raccordables"]
-_FIBRE_TOTAL_VARIANTS   = ["nb_local_total", "locaux_total", "nb_locaux_total", "total_locaux",
-                            "nb_locaux"]
-_FIBRE_PERIODE_VARIANTS = ["trimestre", "TRIMESTRE", "periode", "date", "annee"]
+def _fetch_fibre_commune_url(session: Any, logger: Any) -> str:
+    """Trouve l'URL du shapefile ZIP 2025T4-Commune sur data.gouv.fr."""
+    try:
+        resp = session.get(f"{DATAGOUV_API}{ARCEP_FIBRE_SLUG}/")
+        if resp.status_code == 200:
+            resources = resp.json().get("resources", [])
+            # Chercher le plus récent fichier Commune en ZIP
+            communes = sorted(
+                [r for r in resources if "commune" in r.get("title", "").lower() and r.get("format", "") == "zip"],
+                key=lambda r: r.get("last_modified", r.get("created_at", "")),
+                reverse=True,
+            )
+            if communes:
+                return communes[0]["url"]
+    except Exception as exc:
+        logger.warning("Découverte URL fibre échouée : %s", exc)
+    return ARCEP_FIBRE_FALLBACK
 
 
 def _fetch_arcep_fibre(
     session: Any, logger: Any, ingested_at: datetime, run_date: str
 ) -> pd.DataFrame:
-    url = _discover_resource_url(
-        session, logger, ARCEP_FIBRE_SLUG,
-        preferred_formats=("csv", "zip"),
-        fallback_url=ARCEP_FIBRE_FALLBACK,
-        keywords="ARCEP déploiements fibre FttH locaux éligibles communes",
-    )
+    import geopandas as gpd
+    import tempfile, os
+
+    url = _fetch_fibre_commune_url(session, logger)
+    logger.info("ARCEP fibre Commune ZIP : %s", url)
+
     raw = _download_bytes(session, logger, url)
     if raw is None:
         return pd.DataFrame(columns=COLS_FIBRE)
 
-    df_raw = _bytes_to_df(raw, logger)
-    if df_raw.empty:
+    # Extraire le shapefile et le lire avec geopandas
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+                zf.extractall(tmpdir)
+            shp_files = [f for f in os.listdir(tmpdir) if f.endswith(".shp")]
+            if not shp_files:
+                logger.error("Aucun .shp dans le ZIP fibre")
+                return pd.DataFrame(columns=COLS_FIBRE)
+            gdf = gpd.read_file(os.path.join(tmpdir, shp_files[0]))
+    except Exception as exc:
+        logger.error("Erreur lecture shapefile fibre : %s", exc)
         return pd.DataFrame(columns=COLS_FIBRE)
 
-    logger.info("ARCEP fibre brut : %d × %d", *df_raw.shape)
+    logger.info("Fibre shapefile : %d communes, colonnes=%s", len(gdf), gdf.columns.tolist()[:10])
 
-    col_code   = _find_col(df_raw, _FIBRE_CODE_VARIANTS)
-    col_ftth   = _find_col(df_raw, _FIBRE_FTTH_VARIANTS)
-    col_total  = _find_col(df_raw, _FIBRE_TOTAL_VARIANTS)
-    col_period = _find_col(df_raw, _FIBRE_PERIODE_VARIANTS)
-
-    if not col_code:
-        logger.error("Colonne code commune introuvable dans ARCEP fibre. Colonnes : %s", list(df_raw.columns)[:15])
+    # Filtrer Paris (codes 75101–75120)
+    paris = gdf[gdf["INSEE_COM"].astype(str).str.startswith("751")].copy()
+    if paris.empty:
+        logger.warning("Aucun arrondissement parisien trouvé dans le shapefile fibre")
         return pd.DataFrame(columns=COLS_FIBRE)
 
-    df_paris = df_raw[df_raw[col_code].astype(str).str.strip().isin(PARIS_CODES)].copy()
-    logger.info("ARCEP fibre Paris : %d lignes", len(df_paris))
+    logger.info("Fibre Paris : %d arrondissements", len(paris))
 
-    nb_ftth  = pd.to_numeric(df_paris[col_ftth],  errors="coerce") if col_ftth  else pd.Series([float("nan")] * len(df_paris))
-    nb_total = pd.to_numeric(df_paris[col_total], errors="coerce") if col_total else pd.Series([float("nan")] * len(df_paris))
+    paris["arrondissement"]    = paris["INSEE_COM"].astype(str).str[-2:].astype(int)
+    paris["nb_local_total"]    = pd.to_numeric(paris["Locaux"], errors="coerce")
+    paris["nb_local_ftth"]     = pd.to_numeric(paris["ftth"],   errors="coerce")
+    paris["pct_eligible_ftth"] = (paris["nb_local_ftth"] / paris["nb_local_total"] * 100).round(2)
+    paris["commune_code"]      = paris["INSEE_COM"].astype(str)
+    paris["trimestre"]         = run_date
+    paris["ingested_at"]       = ingested_at
 
-    pct_ftth = (nb_ftth / nb_total * 100).round(2).where(nb_total > 0)
-
-    rows = pd.DataFrame({
-        "commune_code":      df_paris[col_code].astype(str).str.strip(),
-        "arrondissement":    df_paris[col_code].astype(str).str.strip().str[-2:].astype(int),
-        "nb_local_ftth":     nb_ftth.astype("Int64"),
-        "nb_local_total":    nb_total.astype("Int64"),
-        "pct_eligible_ftth": pct_ftth,
-        "trimestre":         df_paris[col_period].astype(str) if col_period else run_date,
-        "ingested_at":       ingested_at,
-    })
-
-    return rows[COLS_FIBRE].reset_index(drop=True)
+    return paris[COLS_FIBRE].reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------

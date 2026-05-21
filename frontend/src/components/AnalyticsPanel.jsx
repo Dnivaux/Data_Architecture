@@ -140,27 +140,28 @@ function ConnectivityDetail({ data, loading }) {
       <div className="flex gap-3 mb-3">
         {best_4g && (
           <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Meilleur 4G</p>
+            <p className="text-[10px] text-slate-500 uppercase">+ d'antennes 4G</p>
             <p className="text-xs font-semibold text-cyan-300 mt-0.5">{best_4g}</p>
           </div>
         )}
         {best_5g && (
           <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Meilleur 5G</p>
+            <p className="text-[10px] text-slate-500 uppercase">+ d'antennes 5G</p>
             <p className="text-xs font-semibold text-violet-300 mt-0.5">{best_5g}</p>
           </div>
         )}
         {ftth_pct != null && (
           <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Fibre</p>
+            <p className="text-[10px] text-slate-500 uppercase">Fibre éligible</p>
             <p className="text-xs font-semibold text-emerald-300 mt-0.5">{ftth_pct} %</p>
           </div>
         )}
       </div>
 
-      {/* Détail par opérateur */}
+      {/* Détail par opérateur (% de part d'antennes dans l'arrondissement) */}
       {operators.length > 0 && (
         <div className="flex flex-col gap-1.5">
+          <p className="text-[10px] text-slate-600 mb-1">Part des antennes par opérateur (source ARCEP 2025-T4)</p>
           {operators.map((op) => (
             <div key={op.operateur} className="flex items-center justify-between text-xs">
               <span className="flex items-center gap-1.5 text-slate-300 w-32">

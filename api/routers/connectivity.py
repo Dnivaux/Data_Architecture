@@ -62,9 +62,12 @@ def get_operator_detail(
     if mobile_file:
         try:
             df = pd.read_parquet(mobile_file)
-            # Filtrer Paris et l'arrondissement
-            commune_code = f"751{str(arrondissement).zfill(2)}"
-            df_arr = df[df["commune_code"].astype(str).str.strip() == commune_code]
+            # Filtrer par arrondissement (nouveau format : colonne arrondissement)
+            if "arrondissement" in df.columns:
+                df_arr = df[df["arrondissement"] == arrondissement]
+            else:
+                commune_code = f"751{str(arrondissement).zfill(2)}"
+                df_arr = df[df["commune_code"].astype(str).str.strip() == commune_code]
 
             if not df_arr.empty:
                 for _, row in df_arr.iterrows():
