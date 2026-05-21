@@ -44,7 +44,7 @@ load_dotenv(Path(__file__).parents[2] / ".env")
 # Config
 # ---------------------------------------------------------------------------
 
-ENDPOINT = "https://api.airparif.asso.fr/indices/prevision/commune"
+ENDPOINT = "https://api.airparif.fr/indices/prevision/commune"
 
 PARIS_INSEE_CODES = [f"751{str(i).zfill(2)}" for i in range(1, 21)]
 

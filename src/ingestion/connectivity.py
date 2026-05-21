@@ -129,37 +129,56 @@ def _discover_resource_url(
     slug: str,
     preferred_formats: tuple[str, ...] = ("csv", "zip"),
     fallback_url: str = "",
+    keywords: str = "",
 ) -> str:
-    """Interroge l'API data.gouv.fr pour trouver la dernière ressource d'un dataset."""
+    """
+    Récupère l'URL de la dernière ressource data.gouv.fr.
+
+    Stratégie :
+    1. Accès direct par slug : GET /api/1/datasets/{slug}/  (API v1, syntaxe recommandée)
+    2. Recherche par mots-clés : GET /api/1/datasets/?q={keywords}
+    3. URL de fallback hardcodée
+    """
+    # --- Méthode 1 : slug comme chemin (syntaxe correcte API v1) ---
     try:
-        resp = session.get(f"{DATAGOUV_API}?slug={slug}&page_size=1")
-        if resp.status_code != 200:
-            logger.warning("data.gouv.fr API HTTP %d pour '%s'", resp.status_code, slug)
-            return fallback_url
-
-        results = resp.json().get("data", [])
-        if not results:
-            logger.warning("Aucun dataset trouvé pour slug '%s'", slug)
-            return fallback_url
-
-        resources = results[0].get("resources", [])
-        # Priorité : ressource la plus récente au format préféré
-        for fmt in preferred_formats:
-            candidates = [
-                r for r in resources
-                if r.get("format", "").lower() == fmt
-            ]
-            if candidates:
-                # Trier par date de création décroissante
-                candidates.sort(key=lambda r: r.get("created_at", ""), reverse=True)
-                url = candidates[0]["url"]
-                logger.info("Ressource découverte (%s) : %s", fmt.upper(), url)
+        resp = session.get(f"{DATAGOUV_API}{slug}/")
+        if resp.status_code == 200:
+            resources = resp.json().get("resources", [])
+            for fmt in preferred_formats:
+                candidates = [r for r in resources if r.get("format", "").lower() == fmt]
+                if candidates:
+                    candidates.sort(
+                        key=lambda r: r.get("last_modified", r.get("created_at", "")),
+                        reverse=True,
+                    )
+                    url = candidates[0]["url"]
+                    logger.info("Ressource '%s' (%s) : %s", slug, fmt.upper(), url)
+                    return url
+            if resources:
+                url = resources[0]["url"]
+                logger.info("Ressource '%s' (format %s) : %s", slug, resources[0].get("format", "?"), url)
                 return url
-
-        logger.warning("Aucune ressource %s trouvée — fallback", preferred_formats)
+        else:
+            logger.warning("data.gouv.fr '%s' → HTTP %d", slug, resp.status_code)
     except Exception as exc:
-        logger.warning("Erreur découverte '%s' : %s — fallback", slug, exc)
+        logger.warning("Lookup slug '%s' échoué : %s", slug, exc)
 
+    # --- Méthode 2 : recherche par mots-clés ---
+    if keywords:
+        try:
+            resp = session.get(DATAGOUV_API, params={"q": keywords, "page_size": 10, "sort": "-created"})
+            if resp.status_code == 200:
+                for ds in resp.json().get("data", []):
+                    for res in ds.get("resources", []):
+                        if res.get("format", "").lower() in preferred_formats:
+                            url = res["url"]
+                            logger.info("Ressource via recherche '%s' : %s", keywords[:50], url)
+                            return url
+        except Exception as exc:
+            logger.warning("Recherche '%s' échouée : %s", keywords[:50], exc)
+
+    if fallback_url:
+        logger.info("Utilisation du fallback : %s", fallback_url)
     return fallback_url
 
 
@@ -256,6 +275,7 @@ def _fetch_arcep_mobile(
         session, logger, ARCEP_MOBILE_SLUG,
         preferred_formats=("csv", "zip"),
         fallback_url=ARCEP_MOBILE_FALLBACK,
+        keywords="Mon Réseau Mobile ARCEP couverture 4G 5G communes",
     )
     raw = _download_bytes(session, logger, url)
     if raw is None:
@@ -328,6 +348,7 @@ def _fetch_arcep_fibre(
         session, logger, ARCEP_FIBRE_SLUG,
         preferred_formats=("csv", "zip"),
         fallback_url=ARCEP_FIBRE_FALLBACK,
+        keywords="ARCEP déploiements fibre FttH locaux éligibles communes",
     )
     raw = _download_bytes(session, logger, url)
     if raw is None:

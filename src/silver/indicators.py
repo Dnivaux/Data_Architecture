@@ -79,6 +79,31 @@ def _sjoin_to_arrondissement(
     Cas 2 — jointure spatiale point-dans-polygone.
     Retourne df enrichi d'une colonne 'arrondissement'.
     """
+    # Reset index pour éviter ValueError avec labels dupliqués (concat multi-batches)
+    df = df.copy().reset_index(drop=True)
+
+    # Vérifier que boundaries_gdf est utilisable
+    if boundaries_gdf is None or boundaries_gdf.empty:
+        logger.warning("boundaries_gdf vide — sjoin impossible, arrondissement à NA")
+        df["arrondissement"] = pd.NA
+        return df
+
+    if "arrondissement" not in boundaries_gdf.columns:
+        candidates = [
+            c for c in boundaries_gdf.columns
+            if any(kw in c.lower() for kw in ("arr", "c_ar", "num_arr", "arrondis"))
+        ]
+        if candidates:
+            boundaries_gdf = boundaries_gdf.rename(columns={candidates[0]: "arrondissement"})
+            logger.info("Colonne boundaries renommée : '%s' → 'arrondissement'", candidates[0])
+        else:
+            logger.error(
+                "boundaries_gdf sans colonne 'arrondissement'. Colonnes : %s",
+                list(boundaries_gdf.columns),
+            )
+            df["arrondissement"] = pd.NA
+            return df
+
     mask = df[lat_col].notna() & df[lon_col].notna()
     valid = df[mask].copy()
     if valid.empty:
@@ -100,8 +125,7 @@ def _sjoin_to_arrondissement(
     # gpd.sjoin peut dupliquer si un point touche deux polygones (rare)
     joined = joined[~joined.index.duplicated(keep="first")]
 
-    df = df.copy()
-    df.loc[valid.index, "arrondissement"] = joined["arrondissement"].values
+    df.loc[valid.index, "arrondissement"] = joined["arrondissement"].reindex(valid.index)
     return df
 
 

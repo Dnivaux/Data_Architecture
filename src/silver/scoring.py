@@ -44,7 +44,9 @@ def _normalize(series: pd.Series, invert: bool = False) -> pd.Series:
     """
     s = pd.to_numeric(series, errors="coerce")
     median_val = s.median()
-    s = s.fillna(median_val if pd.notna(median_val) else 0.0)
+    if not pd.notna(median_val):
+        return pd.Series(50.0, index=series.index)
+    s = s.fillna(median_val)
 
     lo, hi = s.min(), s.max()
     if hi == lo:
@@ -307,8 +309,8 @@ class ArrondissementScorer:
         s_bruit = _normalize(base.get("noise_lden_surface_ha",  pd.Series([0.0]*20)), invert=True)
 
         nightlife = (
-            base.get("nb_bars", pd.Series([0.0]*20)).fillna(0)
-            + base.get("nb_nightclubs", pd.Series([0.0]*20)).fillna(0)
+            pd.to_numeric(base.get("nb_bars", pd.Series([0.0]*20)), errors="coerce").fillna(0)
+            + pd.to_numeric(base.get("nb_nightclubs", pd.Series([0.0]*20)), errors="coerce").fillna(0)
         )
         s_nightlife = _normalize(nightlife, invert=True)
 

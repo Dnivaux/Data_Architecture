@@ -30,7 +30,7 @@ SILVER_ROOT = Path(__file__).parents[2] / "data" / "silver"
 
 def aggregate_prices_by_arrondissement() -> pd.DataFrame:
     """Agrège les prix DVF : moyenne, médiane, comptage par arrondissement × année."""
-    dvf_df = read_parquet("dvf")
+    dvf_df = read_parquet("dvf_clean")
     if dvf_df.empty:
         return pd.DataFrame()
 

@@ -260,3 +260,17 @@
 
 2026-05-13T16:56:35 [WARNING] dvf —     No data returned for arrondissement 20
 2026-05-13T16:56:35 [WARNING] dvf — DVF ingestion produced no rows.
+2026-05-21T10:39:39 [INFO] dvf — DVF ingestion locale démarrée — source : /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/dvf/dvf.csv
+2026-05-21T10:39:39 [INFO] dvf — Taille fichier : 3382.2 Mo
+2026-05-21T10:39:45 [DEBUG] dvf —   Chunk 10 — lus : 2000000 | conservés Paris : 0
+2026-05-21T10:39:51 [DEBUG] dvf —   Chunk 20 — lus : 4000000 | conservés Paris : 0
+2026-05-21T10:39:56 [DEBUG] dvf —   Chunk 30 — lus : 6000000 | conservés Paris : 40472
+2026-05-21T10:40:02 [DEBUG] dvf —   Chunk 40 — lus : 8000000 | conservés Paris : 40472
+2026-05-21T10:40:07 [DEBUG] dvf —   Chunk 50 — lus : 10000000 | conservés Paris : 83627
+2026-05-21T10:40:12 [DEBUG] dvf —   Chunk 60 — lus : 12000000 | conservés Paris : 83627
+2026-05-21T10:40:17 [DEBUG] dvf —   Chunk 70 — lus : 14000000 | conservés Paris : 118866
+2026-05-21T10:40:22 [DEBUG] dvf —   Chunk 80 — lus : 16000000 | conservés Paris : 118866
+2026-05-21T10:40:28 [DEBUG] dvf —   Chunk 90 — lus : 18000000 | conservés Paris : 152135
+2026-05-21T10:40:35 [DEBUG] dvf —   Chunk 100 — lus : 20000000 | conservés Paris : 152135
+2026-05-21T10:40:36 [INFO] dvf — DVF ingestion : 20382915 lignes nationales lues → 189609 transactions parisiennes conservées
+2026-05-21T10:40:36 [INFO] dvf — Parquet sauvegardé → /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/dvf_clean/date=2026-05-21/part-0.parquet

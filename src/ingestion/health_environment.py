@@ -77,9 +77,20 @@ LOG_DIR = Path(__file__).parents[2] / "logs"
 # Airparif ArcGIS — Explore API v2.1 (portail Arcgis opendata)
 AIRPARIF_ARCGIS_BASE = "https://data-airparif-asso.opendata.arcgis.com/api/explore/v2.1"
 AIRPARIF_STATIONS_DATASET = "mesure-en-continu-identification-des-sites-de-mesure"
+# GeoJSON Hub ArcGIS — alternative si Explore API indisponible
+AIRPARIF_GEOJSON_URL = (
+    "https://data-airparif-asso.opendata.arcgis.com/datasets/"
+    "airparif::mesure-en-continu-identification-des-sites-de-mesure.geojson"
+)
+# Fallback data.gouv.fr si portail Airparif indisponible
+DATAGOUV_API = "https://www.data.gouv.fr/api/1/datasets/"
 
 # Paris Open Data — Explore API v2.1
 PARIS_OD_BASE = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets"
+PARIS_OD_CATALOG = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets"
+
+# Codes INSEE Paris
+_PARIS_CODES = {f"751{str(i).zfill(2)}" for i in range(1, 21)}
 ILOTS_DATASET = "ilots-de-fraicheur-espaces-verts-ouverts-au-public"
 ARBRES_DATASET = "les-arbres"
 
@@ -113,6 +124,28 @@ _ARR_MAP: dict[str, int] = {
     f"PARIS {i}E ARRDT": i for i in range(2, 21)
 }
 _ARR_MAP["PARIS 1ER ARRDT"] = 1
+
+
+def _search_paris_od_dataset(session: Any, logger: Any, keywords: str) -> str | None:
+    """
+    Recherche dynamique d'un dataset sur le catalogue Paris Open Data.
+    Retourne le dataset_id si trouvé, None sinon.
+    """
+    try:
+        resp = session.get(
+            PARIS_OD_CATALOG,
+            params={"q": keywords, "limit": 5, "timezone": "UTC"},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            for ds in resp.json().get("datasets", []):
+                dataset_id = ds.get("dataset", {}).get("dataset_id", "")
+                if dataset_id:
+                    logger.info("Dataset Paris OD trouvé via recherche '%s' : %s", keywords, dataset_id)
+                    return dataset_id
+    except Exception as exc:
+        logger.warning("Recherche Paris OD '%s' échouée : %s", keywords, exc)
+    return None
 
 
 def _parse_arrondissement(label: str | None) -> int | None:
@@ -192,12 +225,21 @@ def _paginate_explore(
 def _fetch_airparif_stations(
     session: Any, logger: Any, ingested_at: datetime
 ) -> pd.DataFrame:
-    """Récupère les stations de mesure Airparif depuis leur portail ArcGIS."""
+    """
+    Récupère les stations de mesure Airparif.
+
+    Ordre de priorité :
+    1. Portail ArcGIS Airparif — Explore API v2.1
+    2. Hub ArcGIS — export GeoJSON direct
+    3. data.gouv.fr — recherche par mots-clés
+    """
     import json
 
-    url = f"{AIRPARIF_ARCGIS_BASE}/catalog/datasets/{AIRPARIF_STATIONS_DATASET}/records"
-    logger.info("Airparif stations → %s", url)
+    records: list[dict] = []
 
+    # --- Tentative 1 : Explore API ArcGIS ---
+    url = f"{AIRPARIF_ARCGIS_BASE}/catalog/datasets/{AIRPARIF_STATIONS_DATASET}/records"
+    logger.info("Airparif stations (ArcGIS Explore) → %s", url)
     records = _paginate_explore(
         session, logger, url,
         params={"timezone": "UTC"},
@@ -205,24 +247,58 @@ def _fetch_airparif_stations(
         page_size=100,
     )
 
+    # --- Tentative 2 : Hub GeoJSON direct ---
     if not records:
-        # Fallback : essai du endpoint GeoJSON direct
-        logger.warning("API ArcGIS vide — tentative GeoJSON fallback")
-        geojson_url = (
-            "https://data-airparif-asso.opendata.arcgis.com/datasets/"
-            "airparif::mesure-en-continu-identification-des-sites-de-mesure.geojson"
-        )
+        logger.warning("ArcGIS Explore vide — essai Hub GeoJSON")
         try:
-            resp = session.get(geojson_url)
+            resp = session.get(AIRPARIF_GEOJSON_URL, timeout=30)
             if resp.status_code == 200:
                 features = resp.json().get("features", [])
-                records = [f.get("properties", {}) | {"geometry": f.get("geometry", {})}
-                           for f in features]
+                records = [
+                    f.get("properties", {}) | {"geometry": f.get("geometry", {})}
+                    for f in features
+                ]
+                logger.info("Hub GeoJSON Airparif : %d stations", len(records))
         except Exception as exc:
-            logger.error("Fallback GeoJSON échoué : %s", exc)
+            logger.warning("Hub GeoJSON échoué : %s", exc)
+
+    # --- Tentative 3 : data.gouv.fr ---
+    if not records:
+        logger.warning("Airparif indisponible via ArcGIS — recherche data.gouv.fr")
+        try:
+            resp = session.get(
+                DATAGOUV_API,
+                params={"q": "airparif stations mesure qualite air Paris", "page_size": 5},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                for ds in resp.json().get("data", []):
+                    for res in ds.get("resources", []):
+                        fmt = res.get("format", "").lower()
+                        if fmt in ("geojson", "json", "csv"):
+                            try:
+                                r2 = session.get(res["url"], timeout=30)
+                                if r2.status_code == 200:
+                                    data = r2.json()
+                                    if isinstance(data, dict) and "features" in data:
+                                        records = [
+                                            f.get("properties", {}) | {"geometry": f.get("geometry", {})}
+                                            for f in data["features"]
+                                        ]
+                                    elif isinstance(data, list):
+                                        records = data
+                                    if records:
+                                        logger.info("Airparif via data.gouv.fr : %d stations", len(records))
+                                        break
+                            except Exception:
+                                continue
+                    if records:
+                        break
+        except Exception as exc:
+            logger.warning("Recherche data.gouv.fr Airparif échouée : %s", exc)
 
     if not records:
-        logger.warning("Airparif stations : aucune donnée récupérée")
+        logger.warning("Airparif stations : aucune donnée récupérée depuis aucune source")
         return pd.DataFrame(columns=COLS_STATIONS)
 
     rows = []
@@ -277,9 +353,33 @@ def _fetch_airparif_stations(
 def _fetch_ilots_fraicheur(
     session: Any, logger: Any, ingested_at: datetime
 ) -> pd.DataFrame:
-    """Récupère les espaces verts / îlots de fraîcheur de Paris Open Data."""
-    url = f"{PARIS_OD_BASE}/{ILOTS_DATASET}/records"
+    """
+    Récupère les espaces verts / îlots de fraîcheur de Paris Open Data.
+    Tente le dataset connu, puis recherche dynamiquement si 404.
+    """
+    dataset_id = ILOTS_DATASET
+    url = f"{PARIS_OD_BASE}/{dataset_id}/records"
     logger.info("Paris Open Data : îlots de fraîcheur → %s", url)
+
+    # Vérifier que le dataset existe avant de paginer
+    try:
+        test = session.get(url, params={"limit": 1, "timezone": "UTC"}, timeout=15)
+        if test.status_code != 200:
+            logger.warning(
+                "Dataset '%s' introuvable (HTTP %d) — recherche dynamique",
+                dataset_id, test.status_code,
+            )
+            found = _search_paris_od_dataset(
+                session, logger, "ilots fraicheur espaces verts ouverts public Paris"
+            )
+            if found:
+                dataset_id = found
+                url = f"{PARIS_OD_BASE}/{dataset_id}/records"
+            else:
+                logger.warning("Îlots de fraîcheur : dataset introuvable sur Paris Open Data")
+                return pd.DataFrame(columns=COLS_ILOTS)
+    except Exception as exc:
+        logger.warning("Test connectivité îlots échoué : %s", exc)
 
     records = _paginate_explore(
         session, logger, url,
@@ -289,7 +389,7 @@ def _fetch_ilots_fraicheur(
     )
 
     if not records:
-        logger.warning("Îlots de fraîcheur : aucune donnée reçue")
+        logger.warning("Îlots de fraîcheur : aucune donnée reçue depuis '%s'", dataset_id)
         return pd.DataFrame(columns=COLS_ILOTS)
 
     rows = []
@@ -428,7 +528,7 @@ def ingest() -> pd.DataFrame:
     session = build_session(retries=3, backoff_factor=1.0, timeout=30)
 
     # --- Source 1 : Airparif stations ---
-    logger.info(">>> Source 1/3 : Airparif ArcGIS — stations de mesure")
+    logger.info(">>> Source 1/3 : Airparif — stations de mesure")
     df_stations = _fetch_airparif_stations(session, logger, ingested_at)
     if not df_stations.empty:
         path = save_parquet(df_stations, "airparif_stations",

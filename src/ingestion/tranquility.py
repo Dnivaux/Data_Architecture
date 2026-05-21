@@ -193,32 +193,59 @@ def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
 
 def _discover_bruitparif_url(session: Any, logger: Any) -> list[str]:
     """
-    Interroge data.gouv.fr pour trouver les ressources CSV de l'organisation Bruitparif.
-    Retourne une liste de URLs candidates (CBS commune-level).
+    Cherche les ressources CBS Bruitparif sur data.gouv.fr.
+
+    Stratégie :
+    1. Accès direct au dataset par slug
+    2. Recherche par mots-clés "cartes bruit strategiques ile-de-france"
+    3. Recherche par mots-clés "bruitparif CBS communes"
     """
     urls: list[str] = []
-    try:
-        resp = session.get(
-            f"{DATAGOUV_API}organizations/{DATAGOUV_ORG_BRUITPARIF}/datasets/",
-            params={"page_size": 20},
-        )
-        if resp.status_code != 200:
-            logger.warning("data.gouv.fr organisations Bruitparif → HTTP %d", resp.status_code)
-            return urls
+    FORMATS_OK = ("csv", "zip", "json", "geojson", "xlsx")
+    KEYWORDS_CBS = [
+        "cartes bruit strategiques grands axes routiers ile-de-france",
+        "bruitparif CBS indicateurs communes ile-de-france",
+        "exposition bruit ile-de-france communes",
+    ]
+    CBS_SLUGS = [
+        "cartes-de-bruit-strategiques-des-grands-axes-routiers-nationaux-en-ile-de-france",
+        "bruit-des-infrastructures-routieres-nationales-en-ile-de-france",
+    ]
 
-        datasets = resp.json().get("data", [])
-        for ds in datasets:
-            title = ds.get("title", "").lower()
-            # Cibler les datasets CBS commune-level
-            if any(kw in title for kw in ("cbs", "bruit", "commune", "indicateur")):
-                for res in ds.get("resources", []):
-                    fmt = res.get("format", "").lower()
-                    if fmt in ("csv", "zip", "json", "geojson"):
+    # --- Tentative 1 : slugs connus ---
+    for slug in CBS_SLUGS:
+        try:
+            resp = session.get(f"{DATAGOUV_API}{slug}/", timeout=15)
+            if resp.status_code == 200:
+                for res in resp.json().get("resources", []):
+                    if res.get("format", "").lower() in FORMATS_OK:
                         urls.append(res["url"])
-                        logger.info("Bruitparif ressource découverte : %s", res["url"])
+                        logger.info("Bruitparif slug '%s' → %s", slug, res["url"])
+                if urls:
+                    return urls
+        except Exception as exc:
+            logger.debug("Slug Bruitparif '%s' échoué : %s", slug, exc)
 
-    except Exception as exc:
-        logger.warning("Découverte Bruitparif échouée : %s", exc)
+    # --- Tentative 2 : recherche par mots-clés ---
+    for kw in KEYWORDS_CBS:
+        try:
+            resp = session.get(
+                DATAGOUV_API,
+                params={"q": kw, "page_size": 10, "sort": "-created"},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                for ds in resp.json().get("data", []):
+                    title = ds.get("title", "").lower()
+                    if any(t in title for t in ("bruit", "cbs", "bruitparif", "sonore")):
+                        for res in ds.get("resources", []):
+                            if res.get("format", "").lower() in FORMATS_OK:
+                                urls.append(res["url"])
+                                logger.info("Bruitparif via '%s' : %s", kw[:40], res["url"])
+            if urls:
+                return urls
+        except Exception as exc:
+            logger.warning("Recherche Bruitparif '%s' échouée : %s", kw[:40], exc)
 
     return urls
 
@@ -458,7 +485,7 @@ def ingest() -> pd.DataFrame:
         )
         logger.info("Bruitparif → %d lignes sauvegardées : %s", len(df_bruit), path)
     else:
-        logger.warning("Bruitparif : aucune donnée — Bronze non créé")
+        logger.warning("Bruitparif : aucune donnée disponible — Bronze non créé")
 
     # --- Source 2 : SSMSI crime (lecture Bronze existant) ---
     logger.info(">>> Source 2/2 : SSMSI — chargement Bronze crime existant")
@@ -469,7 +496,8 @@ def ingest() -> pd.DataFrame:
     logger.info(
         "Tranquillité vs Dynamisme — ingestion terminée "
         "(bruitparif=%d lignes, crime=%d lignes disponibles)",
-        len(df_bruit), len(df_crime),
+        len(df_bruit) if not df_bruit.empty else 0,
+        len(df_crime),
     )
     return df_bruit
 
