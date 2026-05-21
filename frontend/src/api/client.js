@@ -58,6 +58,16 @@ export const api = {
       get(`/api/poi/arrondissement/${n}`, { category }),
   },
 
+  chantiers: {
+    /** GET /api/chantiers/live → {total, count, chantiers[]} */
+    live: (arrondissement) => get('/api/chantiers/live', { arrondissement }),
+  },
+
+  connectivity: {
+    /** GET /api/connectivity/{n}/operators → {operators[], ftth_pct, best_4g, best_5g} */
+    operators: (n) => get(`/api/connectivity/${n}/operators`),
+  },
+
   /** GET /health → HealthCheckExtended */
   health: () => get('/health'),
 };

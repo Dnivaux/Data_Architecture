@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import RadarScoreChart from './RadarScoreChart';
 import PriceLineChart from './PriceLineChart';
 import { usePrices } from '../hooks/usePrices';
+import { useOperators } from '../hooks/useOperators';
 import { fmtArrondissement, fmtInt, fmtPrice, ARRONDISSEMENT_NAMES } from '../utils/formatters';
 import { api } from '../api/client';
 
@@ -12,6 +13,7 @@ import { api } from '../api/client';
  */
 export default function AnalyticsPanel({ selectedArrondissement, indicatorData, scoreData }) {
   const { prices, loading: pricesLoading, error: pricesError } = usePrices(selectedArrondissement);
+  const { data: operatorData, loading: operatorsLoading } = useOperators(selectedArrondissement);
   const [compareWith, setCompareWith] = useState('');
   const [comparisonScore, setComparisonScore] = useState(null);
   const [comparing, setComparing] = useState(false);
@@ -101,8 +103,89 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
         )}
       </div>
 
+      {/* Meilleur opérateur réseau */}
+      {selectedArrondissement && (
+        <ConnectivityDetail data={operatorData} loading={operatorsLoading} />
+      )}
+
       {/* Métriques brutes (si arrondissement sélectionné) */}
       {indicatorData && <MetricsDetail data={indicatorData} />}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Bloc connectivité / meilleur opérateur
+// ─────────────────────────────────────────────────────────────────
+const OP_ICONS = { orange: '🟠', sfr: '🔴', bouygues: '🔵', free: '🟣' };
+
+function ConnectivityDetail({ data, loading }) {
+  if (loading) {
+    return (
+      <div className="card">
+        <p className="text-xs text-slate-400 uppercase tracking-wide mb-2">Réseau</p>
+        <p className="text-xs text-slate-500 animate-pulse">Chargement…</p>
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const { ftth_pct, best_4g, best_5g, operators = [] } = data;
+
+  return (
+    <div className="card">
+      <p className="text-xs text-slate-400 uppercase tracking-wide mb-3">Réseau &amp; Connectivité</p>
+
+      {/* Meilleurs opérateurs */}
+      <div className="flex gap-3 mb-3">
+        {best_4g && (
+          <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
+            <p className="text-[10px] text-slate-500 uppercase">Meilleur 4G</p>
+            <p className="text-xs font-semibold text-cyan-300 mt-0.5">{best_4g}</p>
+          </div>
+        )}
+        {best_5g && (
+          <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
+            <p className="text-[10px] text-slate-500 uppercase">Meilleur 5G</p>
+            <p className="text-xs font-semibold text-violet-300 mt-0.5">{best_5g}</p>
+          </div>
+        )}
+        {ftth_pct != null && (
+          <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
+            <p className="text-[10px] text-slate-500 uppercase">Fibre</p>
+            <p className="text-xs font-semibold text-emerald-300 mt-0.5">{ftth_pct} %</p>
+          </div>
+        )}
+      </div>
+
+      {/* Détail par opérateur */}
+      {operators.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {operators.map((op) => (
+            <div key={op.operateur} className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5 text-slate-300 w-32">
+                <span>{OP_ICONS[op.operateur] ?? '📶'}</span>
+                {op.label}
+              </span>
+              <div className="flex gap-2">
+                {op.pct_pop_4g != null && (
+                  <span className="text-cyan-400">4G&nbsp;{op.pct_pop_4g}%</span>
+                )}
+                {op.pct_pop_5g != null && (
+                  <span className="text-violet-400">5G&nbsp;{op.pct_pop_5g}%</span>
+                )}
+                {op.pct_pop_4g == null && op.pct_pop_5g == null && (
+                  <span className="text-slate-600">—</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {operators.length === 0 && !best_4g && ftth_pct == null && (
+        <p className="text-xs text-slate-600">Données ARCEP non disponibles — relancer le pipeline</p>
+      )}
     </div>
   );
 }

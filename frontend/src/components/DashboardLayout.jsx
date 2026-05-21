@@ -3,6 +3,8 @@ import KPIGrid from './KPIGrid';
 import InteractiveMap from './InteractiveMap';
 import AnalyticsPanel from './AnalyticsPanel';
 import LiveStatusBadge from './LiveStatusBadge';
+import { useChantiers } from '../hooks/useChantiers';
+import { useState } from 'react';
 
 /**
  * Layout principal de l'application :
@@ -26,6 +28,9 @@ export default function DashboardLayout({
   indicatorMap,
   liveMetrics,
 }) {
+  const [showChantiers, setShowChantiers] = useState(false);
+  const { chantiers } = useChantiers(selectedArrondissement, showChantiers);
+
   const selectedScore = selectedArrondissement
     ? scoreMap?.[selectedArrondissement] ?? null
     : computeGlobalAverage(scores);
@@ -45,6 +50,8 @@ export default function DashboardLayout({
         onIndicatorChange={onIndicatorChange}
         liveMetrics={liveMetrics}
         globalStats={globalStats}
+        showChantiers={showChantiers}
+        onToggleChantiers={() => setShowChantiers((v) => !v)}
       />
 
       {/* ── Zone principale ── */}
@@ -98,6 +105,8 @@ export default function DashboardLayout({
                 selectedIndicator={selectedIndicator}
                 selectedArrondissement={selectedArrondissement}
                 onSelectArrondissement={onSelectArrondissement}
+                chantiers={chantiers}
+                showChantiers={showChantiers}
               />
             </div>
 

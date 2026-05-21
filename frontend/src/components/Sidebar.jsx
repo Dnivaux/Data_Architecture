@@ -19,6 +19,8 @@ export default function Sidebar({
   onIndicatorChange,
   liveMetrics,
   globalStats,
+  showChantiers,
+  onToggleChantiers,
 }) {
   return (
     <aside className="w-64 shrink-0 flex flex-col gap-5 bg-slate-800/60 border-r border-slate-700 px-4 py-5 overflow-y-auto">
@@ -75,6 +77,31 @@ export default function Sidebar({
           </div>
         </div>
       )}
+
+      <hr className="border-slate-700" />
+
+      {/* Couches cartographiques */}
+      <div>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
+          Couches
+        </p>
+        <button
+          onClick={onToggleChantiers}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-colors
+            ${showChantiers
+              ? 'bg-orange-600/30 text-orange-300 font-medium border border-orange-500/30'
+              : 'text-slate-400 hover:text-slate-100 hover:bg-slate-700/50'
+            }`}
+        >
+          <span>🚧</span>
+          <span className="leading-tight">Chantiers</span>
+          {showChantiers && (
+            <span className="ml-auto text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded-full">
+              LIVE
+            </span>
+          )}
+        </button>
+      </div>
 
       <div className="mt-auto">
         <hr className="border-slate-700 mb-4" />
