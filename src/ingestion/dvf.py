@@ -30,12 +30,17 @@ ingested_at             datetime horodatage UTC de l'ingestion
 """
 from __future__ import annotations
 
+import csv
 import logging
+import os
+import unicodedata
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from .base import BRONZE_ROOT, get_logger, save_parquet
 

@@ -97,7 +97,7 @@ install:
 bronze:
 	@echo ">>> BRONZE — sources historiques (DVF, OSM, boundaries, crime, revenus…)"
 	@echo "    Durée estimée : 5-15 min selon la connexion internet"
-	python main.py
+	python3 main.py
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Silver + Gold (calculs analytiques, sans téléchargement)
@@ -105,7 +105,7 @@ bronze:
 .PHONY: silver-gold
 silver-gold:
 	@echo ">>> SILVER + GOLD — calcul des scores et tables analytiques"
-	python pipeline.py --skip-bronze --skip-pg
+	python3 pipeline.py --skip-bronze --skip-pg
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Export PostgreSQL uniquement (Gold → PG)
@@ -113,7 +113,7 @@ silver-gold:
 .PHONY: pg-export
 pg-export: pg
 	@echo ">>> EXPORT → PostgreSQL"
-	python -m src.gold.export_pg
+	python3 -m src.gold.export_pg
 
 # ─────────────────────────────────────────────────────────────────────────────
 # refresh : Bronze indicateurs + Silver + Gold + PG
@@ -122,7 +122,7 @@ pg-export: pg
 .PHONY: refresh
 refresh: pg
 	@echo ">>> REFRESH (Bronze indicateurs + Silver + Gold + PostgreSQL)"
-	python pipeline.py --mobility-once
+	python3 pipeline.py --mobility-once
 
 # ─────────────────────────────────────────────────────────────────────────────
 # pipeline : Bronze COMPLET + Silver + Gold + PG
@@ -130,7 +130,7 @@ refresh: pg
 .PHONY: pipeline
 pipeline: pg bronze
 	@echo ">>> Silver + Gold + PostgreSQL"
-	python pipeline.py --skip-bronze --mobility-once
+	python3 pipeline.py --skip-bronze --mobility-once
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Serveurs de développement
@@ -153,7 +153,7 @@ frontend:
 .PHONY: velib
 velib:
 	@echo ">>> Daemon Vélib' micro-batch (Ctrl+C pour arrêter)"
-	python -m src.ingestion.mobility_micro_batch
+	python3 -m src.ingestion.mobility_micro_batch
 
 # ─────────────────────────────────────────────────────────────────────────────
 # all : pipeline complet + démarrage des serveurs

@@ -2,12 +2,11 @@
 OSM / Overpass Bronze Ingestion
 ================================
 Source  : OpenStreetMap via Overpass API
-Endpoint: https://overpass-api.de/api/interpreter
+Endpoints: https://overpass.private.coffee/api/interpreter (primary)
+           https://overpass-api.de/api/interpreter (fallback)
 
-Fetches amenity points-of-interest inside Paris for three categories:
-  - bars          (amenity=bar)
-  - nightclubs    (amenity=nightclub)
-  - parks         (leisure=park)
+Fetches amenity points-of-interest inside Paris for selected categories,
+including bars, cinemas, stadiums, schools, shops, and restaurants.
 
 Both OSM *nodes* (direct lat/lon) and *ways* (polygon centroid via `out center`)
 are normalised to a single point geometry.
@@ -29,20 +28,35 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+if __package__ in (None, ""):
+    # Allow running as a script: python src/ingestion/osm.py
+    repo_root = Path(__file__).parents[2]
+    sys.path.insert(0, str(repo_root))
+    __package__ = "src.ingestion"
 
 import pandas as pd
 
 from .base import build_session, get_logger, save_parquet
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_URLS = [
+    os.environ.get("OVERPASS_URL"),
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass-api.de/api/interpreter",
+]
+OVERPASS_URLS = [url for url in OVERPASS_URLS if url]
 LOG_DIR = Path(__file__).parents[2] / "logs"
+OSM_HTTP_TIMEOUT = int(os.environ.get("OSM_HTTP_TIMEOUT", "120"))
+OSM_QUERY_TIMEOUT = int(os.environ.get("OSM_QUERY_TIMEOUT", "120"))
 
 # Overpass query template – fetches nodes + ways, returns center coords for ways
 _QUERY_TEMPLATE = """
-[out:json][timeout:60];
+[out:json][timeout:{timeout}];
 area["name"="Paris"]["admin_level"="8"]->.paris;
 (
   node[{tag_filter}](area.paris);
@@ -53,8 +67,15 @@ out center tags;
 
 AMENITY_FILTERS: dict[str, str] = {
     "bar": 'amenity="bar"',
+    "cinema": 'amenity="cinema"',
+    "college": 'amenity="college"',
     "nightclub": 'amenity="nightclub"',
     "park": 'leisure="park"',
+    "restaurant": 'amenity="restaurant"',
+    "school": 'amenity="school"',
+    "shop": 'shop~"supermarket|hypermarket|convenience|grocery|department_store|mall"',
+    "stadium": 'leisure="stadium"',
+    "university": 'amenity="university"',
 }
 
 BRONZE_COLUMNS = [
@@ -72,7 +93,7 @@ BRONZE_COLUMNS = [
 
 
 def _build_query(tag_filter: str) -> str:
-    return _QUERY_TEMPLATE.format(tag_filter=tag_filter).strip()
+    return _QUERY_TEMPLATE.format(tag_filter=tag_filter, timeout=OSM_QUERY_TIMEOUT).strip()
 
 
 def _fetch_amenity(
@@ -85,14 +106,35 @@ def _fetch_amenity(
     query = _build_query(tag_filter)
     logger.debug("Overpass query for '%s':\n%s", amenity_type, query)
 
-    resp = session.post(OVERPASS_URL, data={"data": query})
-    if resp.status_code != 200:
-        logger.warning(
-            "OSM %s → HTTP %d: %s", amenity_type, resp.status_code, resp.text[:300]
-        )
-        return []
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+        "User-Agent": "UrbanDataExplorer/1.0",
+    }
 
-    return resp.json().get("elements", [])
+    for url in OVERPASS_URLS:
+        resp = session.post(url, data={"data": query}, headers=headers)
+        if resp.status_code == 406:
+            # Some instances accept raw query text instead of form-encoded.
+            headers["Content-Type"] = "text/plain; charset=utf-8"
+            resp = session.post(url, data=query, headers=headers)
+
+        if resp.status_code != 200:
+            logger.warning(
+                "OSM %s → HTTP %d (%s): %s",
+                amenity_type, resp.status_code, url, resp.text[:300],
+            )
+            continue
+
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            logger.warning("OSM %s JSON parse error (%s): %s", amenity_type, url, exc)
+            continue
+
+        return data.get("elements", [])
+
+    return []
 
 
 def _element_to_row(
@@ -159,7 +201,7 @@ def ingest(
     if unknown:
         raise ValueError(f"Unknown amenity types: {unknown}. Valid: {set(AMENITY_FILTERS)}")
 
-    session = build_session(retries=3, backoff_factor=2.0)
+    session = build_session(retries=3, backoff_factor=2.0, timeout=OSM_HTTP_TIMEOUT)
     all_frames: list[pd.DataFrame] = []
 
     logger.info("OSM ingestion started — amenity_types=%s", types_to_fetch)
