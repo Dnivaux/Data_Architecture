@@ -154,8 +154,9 @@ def build_arrondissement_summary(logger: logging.Logger) -> pd.DataFrame:
     # Scores complets (Silver scores_by_arrondissement)
     scores = _read_silver("scores_by_arrondissement.parquet", logger)
     if not scores.empty:
-        # Supprimer les colonnes de métadonnées avant merge
-        drop_cols = [c for c in ["geometry", "geometry_wkt", "computed_at", "ingested_at"]
+        # Supprimer les colonnes de métadonnées ET les prix avant merge
+        # (les prix seront mis à jour depuis prices_by_arrondissement_year après)
+        drop_cols = [c for c in ["geometry", "geometry_wkt", "computed_at", "ingested_at", "median_price"]
                      if c in scores.columns]
         base = base.merge(scores.drop(columns=drop_cols, errors="ignore"),
                           on="arrondissement", how="left")

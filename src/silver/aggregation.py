@@ -29,18 +29,40 @@ SILVER_ROOT = Path(__file__).parents[2] / "data" / "silver"
 # ---------------------------------------------------------------------------
 
 def aggregate_prices_by_arrondissement() -> pd.DataFrame:
-    """Agrège les prix DVF : moyenne, médiane, comptage par arrondissement × année."""
+    """Agrège les prix DVF : moyenne, médiane, comptage par arrondissement × année.
+
+    Calcule les prix au m² en divisant valeur_fonciere par surface_reelle_bati.
+    Filtre les transactions avec surface > 0 pour éviter les divisions par zéro.
+    """
     dvf_df = read_parquet("dvf_clean")
     if dvf_df.empty:
         return pd.DataFrame()
 
-    dvf_df["arrondissement"] = dvf_df["code_postal"].astype(str).str[-2:].astype(int)
+    # Extraire l'arrondissement avec gestion des valeurs NaN
+    dvf_df["arrondissement"] = pd.to_numeric(
+        dvf_df["code_postal"].astype(str).str[-2:],
+        errors="coerce"
+    ).astype("Int64")
     dvf_df["year"] = pd.to_datetime(dvf_df["date_mutation"], errors="coerce").dt.year
 
+    # Filtrer les enregistrements valides
+    dvf_clean = dvf_df[
+        (dvf_df["arrondissement"].notna()) &
+        (dvf_df["year"].notna()) &
+        (dvf_df["surface_reelle_bati"] > 0) &
+        (dvf_df["valeur_fonciere"] > 0)
+    ].copy()
+
+    if dvf_clean.empty:
+        return pd.DataFrame()
+
+    # Calculer le prix au m²
+    dvf_clean["prix_m2"] = dvf_clean["valeur_fonciere"] / dvf_clean["surface_reelle_bati"]
+
     grouped = (
-        dvf_df.groupby(["arrondissement", "year"])
+        dvf_clean.groupby(["arrondissement", "year"])
         .agg({
-            "valeur_fonciere":   ["count", "mean", "median", "min", "max"],
+            "prix_m2":   ["count", "mean", "median", "min", "max"],
             "surface_reelle_bati": "mean",
         })
         .reset_index()

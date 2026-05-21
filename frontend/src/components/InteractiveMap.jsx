@@ -1,47 +1,30 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { MapContainer, GeoJSON, TileLayer, useMap, CircleMarker, Popup, useMapEvents } from 'react-leaflet';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { MapContainer, GeoJSON, TileLayer, useMap, CircleMarker, Popup } from 'react-leaflet';
+import L from 'leaflet';
 import wellknown from 'wellknown';
 import { indicatorColor } from '../utils/scoreColors';
 import { INDICATOR_OPTIONS } from './Sidebar';
 
-// Tuiles sombres CartoDB — cohérentes avec le thème dark du dashboard
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
   'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-// API BAN (Base Adresse Nationale) — géocodage inverse
-const BAN_REVERSE_URL = 'https://api-adresse.data.gouv.fr/reverse/';
-// IRIS contours depuis Paris Open Data
-const IRIS_API = 'https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/iris-demographie/exports/geojson?limit=500';
-
-// GeoJSON statique des 80 quartiers de Paris
-// Source : Paris OpenData — quartier_paris
-// Le fichier est chargé depuis /data/paris-quartiers.geojson (public/)
-// OU téléchargé depuis l'API Paris OpenData en fallback.
 const QUARTIERS_LOCAL = '/data/paris-quartiers.geojson';
-const QUARTIERS_API =
-  'https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/quartier_paris/exports/geojson';
+const QUARTIERS_API   = 'https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/quartier_paris/exports/geojson';
+const BAN_REVERSE_URL = 'https://api-adresse.data.gouv.fr/reverse/';
 
 // ─────────────────────────────────────────────────────────────────
-// Sous-composant : contrôleur de vue (fitBounds / flyTo)
-// Doit être enfant de MapContainer pour accéder à useMap()
+// Contrôleur de vue (fitBounds / flyTo) — doit être dans MapContainer
 // ─────────────────────────────────────────────────────────────────
 function MapViewController({ fitBounds, resetSignal }) {
   const map = useMap();
-
   useEffect(() => {
-    if (fitBounds) {
-      map.fitBounds(fitBounds, { padding: [40, 40], maxZoom: 15, duration: 0.6 });
-    }
+    if (fitBounds) map.fitBounds(fitBounds, { padding: [40, 40], maxZoom: 15, duration: 0.6 });
   }, [fitBounds, map]);
-
   useEffect(() => {
-    if (resetSignal > 0) {
-      map.flyTo([48.8566, 2.3522], 12, { duration: 0.8 });
-    }
+    if (resetSignal > 0) map.flyTo([48.8566, 2.3522], 12, { duration: 0.8 });
   }, [resetSignal, map]);
-
   return null;
 }
 
@@ -49,39 +32,22 @@ function MapViewController({ fitBounds, resetSignal }) {
 // Composant principal
 // ─────────────────────────────────────────────────────────────────
 export default function InteractiveMap({
-  indicators,          // ArrondissementDetail[]
-  selectedIndicator,   // string (clé de score)
+  indicators,
+  selectedIndicator,
   selectedArrondissement,
   onSelectArrondissement,
-  chantiers,           // Chantier[] (depuis useChantiers)
-  showChantiers,       // bool
+  chantiers,
+  showChantiers,
 }) {
   const [quartiersGeoJSON, setQuartiersGeoJSON] = useState(null);
-  const [irisGeoJSON, setIrisGeoJSON]         = useState(null);
-  const [fitBounds, setFitBounds]             = useState(null);
-  const [resetSignal, setResetSignal]         = useState(0);
-  const [banPopup, setBanPopup]               = useState(null); // {lat, lon, label, iris}
+  const [fitBounds, setFitBounds]               = useState(null);
+  const [resetSignal, setResetSignal]           = useState(0);
+  // Popup pour un quartier cliqué : {lat, lon, nom, address, loadingBan}
+  const [quartierPopup, setQuartierPopup]       = useState(null);
 
-  const geoJSONRef = useRef(null);  // ref vers la couche Leaflet GeoJSON
+  const geoJSONRef = useRef(null);
 
-  // ── Chargement IRIS (quand arrondissement sélectionné) ───────
-  useEffect(() => {
-    if (!selectedArrondissement) { setIrisGeoJSON(null); return; }
-    let cancelled = false;
-    async function loadIris() {
-      try {
-        const url = `${IRIS_API}&where=c_ar%3D${selectedArrondissement}`;
-        const r = await fetch(url);
-        if (!r.ok) return;
-        const data = await r.json();
-        if (!cancelled && data?.features?.length) setIrisGeoJSON(data);
-      } catch { /* IRIS optionnel, échec silencieux */ }
-    }
-    loadIris();
-    return () => { cancelled = true; };
-  }, [selectedArrondissement]);
-
-  // ── Chargement des quartiers (local → fallback API) ──────────
+  // ── Chargement quartiers (local → API fallback) ───────────────
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -96,14 +62,28 @@ export default function InteractiveMap({
           if (!r.ok) return;
           const data = await r.json();
           if (!cancelled) setQuartiersGeoJSON(data);
-        } catch { /* drill-down désactivé silencieusement */ }
+        } catch { /* silencieux */ }
       }
     }
     load();
     return () => { cancelled = true; };
   }, []);
 
-  // ── Conversion WKT → GeoJSON FeatureCollection ───────────────
+  // ── Fermer la popup quartier si on change d'arrondissement ───
+  useEffect(() => { setQuartierPopup(null); }, [selectedArrondissement]);
+
+  // ── BAN reverse geocoding ─────────────────────────────────────
+  async function fetchBanAddress(lat, lon) {
+    try {
+      const r = await fetch(`${BAN_REVERSE_URL}?lon=${lon}&lat=${lat}`);
+      if (!r.ok) return null;
+      const data = await r.json();
+      const props = data?.features?.[0]?.properties;
+      return props?.label ?? null;
+    } catch { return null; }
+  }
+
+  // ── GeoJSON arrondissements (WKT → Features) ─────────────────
   const arrGeoJSON = useMemo(() => {
     if (!indicators?.length) return null;
     const features = indicators
@@ -122,18 +102,15 @@ export default function InteractiveMap({
         };
       })
       .filter(Boolean);
-    return features.length
-      ? { type: 'FeatureCollection', features }
-      : null;
+    return features.length ? { type: 'FeatureCollection', features } : null;
   }, [indicators, selectedIndicator]);
 
-  // Valeurs pour l'interpolation de couleur (min/max du dataset)
   const allValues = useMemo(
     () => indicators?.map((d) => d[selectedIndicator]).filter((v) => v != null) ?? [],
-    [indicators, selectedIndicator]
+    [indicators, selectedIndicator],
   );
 
-  // ── Style choroplèthe ─────────────────────────────────────────
+  // ── Style choroplèthe arrondissements ─────────────────────────
   function styleFeature(feature) {
     const { arrondissement, value } = feature.properties;
     const isSelected = arrondissement === selectedArrondissement;
@@ -145,8 +122,7 @@ export default function InteractiveMap({
     };
   }
 
-  // ── Mise à jour des styles sans re-monter la couche ───────────
-  // (seulement quand selectedArrondissement change, pas quand l'indicateur change)
+  // Re-style sans re-monter (sélection change)
   useEffect(() => {
     if (!geoJSONRef.current) return;
     geoJSONRef.current.eachLayer((layer) => {
@@ -161,71 +137,71 @@ export default function InteractiveMap({
     });
   }, [selectedArrondissement]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Interactions par feature ──────────────────────────────────
-  function onEachFeature(feature, layer) {
+  // ── Interactions arrondissements ──────────────────────────────
+  function onEachArrFeature(feature, layer) {
     const { arrondissement, nom } = feature.properties;
-
-    layer.on('click', () => {
+    layer.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      setQuartierPopup(null);
       onSelectArrondissement(arrondissement);
       setFitBounds(layer.getBounds());
     });
-
     layer.on('mouseover', () => {
-      if (arrondissement !== selectedArrondissement) {
+      if (arrondissement !== selectedArrondissement)
         layer.setStyle({ fillOpacity: 0.85, weight: 2, color: '#475569' });
-      }
     });
-
     layer.on('mouseout', () => {
-      const isSelected = arrondissement === selectedArrondissement;
+      const isSel = arrondissement === selectedArrondissement;
       layer.setStyle({
-        fillOpacity: isSelected ? 0.85 : 0.65,
-        color:       isSelected ? '#818CF8' : '#0F172A',
-        weight:      isSelected ? 2.5 : 1,
+        fillOpacity: isSel ? 0.85 : 0.65,
+        color:       isSel ? '#818CF8' : '#0F172A',
+        weight:      isSel ? 2.5 : 1,
       });
     });
-
     layer.bindTooltip(
       `<div style="font-size:12px;font-weight:600">${nom ?? `Paris ${arrondissement}e`}</div>
        <div style="font-size:11px;color:#94A3B8">${formatIndicatorValue(selectedIndicator, feature.properties.value)}</div>`,
-      { sticky: true, className: 'leaflet-tooltip-urban' }
+      { sticky: true, className: 'leaflet-tooltip-urban' },
     );
   }
 
-  // ── Géocodage inverse BAN (clic sur la carte) ────────────────
-  const handleMapClick = useCallback(async (lat, lon) => {
-    try {
-      const r = await fetch(`${BAN_REVERSE_URL}?lon=${lon}&lat=${lat}`);
-      if (!r.ok) return;
-      const data = await r.json();
-      const feat = data?.features?.[0];
-      if (!feat) return;
-      const props = feat.properties;
-      setBanPopup({
-        lat,
-        lon,
-        label: props.label ?? `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
-        postcode: props.postcode,
-        city: props.city,
-        score: props.score,
-      });
-    } catch { /* géocodage optionnel */ }
-  }, []);
-
-  // ── Quartiers du drill-down ───────────────────────────────────
+  // ── Quartiers filtrés pour l'arrondissement sélectionné ───────
   const quartiersFiltered = useMemo(() => {
     if (!quartiersGeoJSON || !selectedArrondissement) return null;
     const features = (quartiersGeoJSON.features ?? []).filter((f) => {
-      // Le champ arrondissement peut être c_ar (int) ou n_sq_ar (string)
       const val = f.properties?.c_ar ?? f.properties?.n_sq_ar ?? f.properties?.arrondissement;
       return parseInt(val, 10) === selectedArrondissement;
     });
     return features.length ? { type: 'FeatureCollection', features } : null;
   }, [quartiersGeoJSON, selectedArrondissement]);
 
-  // ── Nom de l'indicateur affiché ───────────────────────────────
-  const indicatorLabel =
-    INDICATOR_OPTIONS.find((o) => o.id === selectedIndicator)?.label ?? selectedIndicator;
+  // ── Interactions quartiers — clic → précision IRIS + BAN ─────
+  function onEachQuartierFeature(feature, layer) {
+    const nom = feature.properties?.l_qu ?? feature.properties?.libelle ?? 'Quartier';
+    // fillOpacity minuscule pour rendre la zone cliquable partout
+    layer.setStyle({ fillColor: '#A5B4FC', fillOpacity: 0.01 });
+
+    layer.on('click', async (e) => {
+      L.DomEvent.stopPropagation(e); // empêche le clic arrondissement
+      const { lat, lng } = e.latlng;
+      setQuartierPopup({ lat, lon: lng, nom, address: null, loadingBan: true });
+      const address = await fetchBanAddress(lat, lng);
+      setQuartierPopup((prev) =>
+        prev && prev.nom === nom ? { ...prev, address, loadingBan: false } : prev,
+      );
+    });
+
+    layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.12, color: '#C7D2FE' }));
+    layer.on('mouseout',  () => layer.setStyle({ fillOpacity: 0.01, color: '#A5B4FC' }));
+
+    layer.bindTooltip(
+      `<div style="font-size:11px;color:#A5B4FC;font-weight:600">📍 ${nom}</div>
+       <div style="font-size:10px;color:#94A3B8">Cliquer pour l'adresse exacte</div>`,
+      { sticky: true, className: 'leaflet-tooltip-urban' },
+    );
+  }
+
+  const indicatorLabel = INDICATOR_OPTIONS.find((o) => o.id === selectedIndicator)?.label ?? selectedIndicator;
 
   function handleBackToGlobal() {
     onSelectArrondissement(null);
@@ -256,11 +232,11 @@ export default function InteractiveMap({
       {/* Légende couleur */}
       <ColorLegend indicatorId={selectedIndicator} />
 
-      {/* Badge IRIS actif */}
-      {selectedArrondissement && irisGeoJSON && (
-        <div className="absolute bottom-5 right-3 z-[1000] bg-slate-900/90 border border-orange-500/40 rounded-lg px-2 py-1 text-xs backdrop-blur-sm flex items-center gap-1">
-          <span className="w-3 h-0.5 bg-orange-400 opacity-70 inline-block" style={{ borderTop: '1px dashed #F97316' }} />
-          <span className="text-orange-400">IRIS</span>
+      {/* Badge quartiers actifs */}
+      {selectedArrondissement && quartiersFiltered && (
+        <div className="absolute bottom-5 right-3 z-[1000] bg-slate-900/90 border border-indigo-400/40 rounded-lg px-2 py-1 text-xs backdrop-blur-sm flex items-center gap-1.5 text-indigo-300">
+          <span>📍</span>
+          <span>Quartiers cliquables</span>
         </div>
       )}
 
@@ -271,63 +247,56 @@ export default function InteractiveMap({
         zoomControl={false}
         scrollWheelZoom
       >
-        {/* Tuiles sombres */}
         <TileLayer url={TILE_URL} attribution={TILE_ATTR} />
 
-        {/* Choroplèthe arrondissements (clé = indicateur → re-monte si indicateur change) */}
+        {/* Choroplèthe arrondissements */}
         {arrGeoJSON && (
           <GeoJSON
             key={selectedIndicator}
             ref={geoJSONRef}
             data={arrGeoJSON}
             style={styleFeature}
-            onEachFeature={onEachFeature}
+            onEachFeature={onEachArrFeature}
           />
         )}
 
-        {/* Contours quartiers du drill-down */}
+        {/* Quartiers du drill-down (cliquables pour précision IRIS + BAN) */}
         {selectedArrondissement && quartiersFiltered && (
           <GeoJSON
             key={`q-${selectedArrondissement}`}
             data={quartiersFiltered}
             style={{
-              fillColor:   'transparent',
-              fillOpacity: 0,
+              fillColor:   '#A5B4FC',
+              fillOpacity: 0.01,
               color:       '#A5B4FC',
               weight:      1.5,
               dashArray:   '6 4',
             }}
+            onEachFeature={onEachQuartierFeature}
           />
         )}
 
-        {/* Contours IRIS (précision fine — chargé si arrondissement sélectionné) */}
-        {selectedArrondissement && irisGeoJSON && (
-          <GeoJSON
-            key={`iris-${selectedArrondissement}`}
-            data={irisGeoJSON}
-            style={{
-              fillColor:   'transparent',
-              fillOpacity: 0,
-              color:       '#FB923C',
-              weight:      1,
-              dashArray:   '3 3',
-            }}
-            onEachFeature={(feature, layer) => {
-              const irisCode = feature.properties?.iris_code
-                ?? feature.properties?.dcomiris
-                ?? feature.properties?.code_iris
-                ?? '';
-              const irisLabel = feature.properties?.nom_iris
-                ?? feature.properties?.libiris
-                ?? irisCode;
-              if (irisLabel) {
-                layer.bindTooltip(
-                  `<div style="font-size:11px;color:#FB923C">IRIS : ${irisLabel}</div>`,
-                  { sticky: true, className: 'leaflet-tooltip-urban' }
-                );
-              }
-            }}
-          />
+        {/* Popup résultat clic quartier (BAN + nom) */}
+        {quartierPopup && (
+          <Popup
+            position={[quartierPopup.lat, quartierPopup.lon]}
+            eventHandlers={{ remove: () => setQuartierPopup(null) }}
+          >
+            <div style={{ minWidth: 180 }}>
+              <p style={{ fontWeight: 700, marginBottom: 4, color: '#4F46E5' }}>
+                📍 {quartierPopup.nom}
+              </p>
+              {quartierPopup.loadingBan ? (
+                <p style={{ fontSize: 11, color: '#94A3B8' }}>Géocodage…</p>
+              ) : quartierPopup.address ? (
+                <p style={{ fontSize: 12 }}>{quartierPopup.address}</p>
+              ) : (
+                <p style={{ fontSize: 11, color: '#94A3B8' }}>
+                  {quartierPopup.lat.toFixed(5)}, {quartierPopup.lon.toFixed(5)}
+                </p>
+              )}
+            </div>
+          </Popup>
         )}
 
         {/* Chantiers (marqueurs orange) */}
@@ -336,53 +305,33 @@ export default function InteractiveMap({
             <CircleMarker
               key={c.id || `${c.lat}-${c.lon}`}
               center={[c.lat, c.lon]}
-              radius={6}
-              pathOptions={{
-                color: '#EA580C',
-                fillColor: '#F97316',
-                fillOpacity: 0.85,
-                weight: 1.5,
-              }}
+              radius={5}
+              pathOptions={{ color: '#EA580C', fillColor: '#F97316', fillOpacity: 0.85, weight: 1.5 }}
             >
               <Popup>
-                <div style={{ minWidth: 180 }}>
+                <div style={{ minWidth: 190 }}>
                   <p style={{ fontWeight: 600, marginBottom: 4 }}>🚧 {c.titre}</p>
-                  {c.adresse && <p style={{ fontSize: 11, color: '#64748B' }}>{c.adresse}</p>}
+                  {c.categorie && (
+                    <p style={{ fontSize: 10, color: '#F97316', marginBottom: 4 }}>{c.categorie}</p>
+                  )}
+                  {c.description && (
+                    <p style={{ fontSize: 11, color: '#475569', marginBottom: 4 }}>{c.description}</p>
+                  )}
                   {(c.date_debut || c.date_fin) && (
-                    <p style={{ fontSize: 11, marginTop: 4 }}>
-                      {c.date_debut ? `Début : ${c.date_debut.slice(0, 10)}` : ''}
-                      {c.date_fin   ? ` — Fin : ${c.date_fin.slice(0, 10)}` : ''}
+                    <p style={{ fontSize: 11 }}>
+                      {c.date_debut ? `Début : ${String(c.date_debut).slice(0, 10)}` : ''}
+                      {c.date_fin   ? ` → ${String(c.date_fin).slice(0, 10)}` : ''}
                     </p>
                   )}
-                  {c.statut && <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>{c.statut}</p>}
+                  {c.maitre_ouvrage && (
+                    <p style={{ fontSize: 10, color: '#94A3B8', marginTop: 4 }}>{c.maitre_ouvrage}</p>
+                  )}
                 </div>
               </Popup>
             </CircleMarker>
-          ) : null
+          ) : null,
         )}
 
-        {/* Popup géocodage BAN */}
-        {banPopup && (
-          <Popup
-            position={[banPopup.lat, banPopup.lon]}
-            eventHandlers={{ remove: () => setBanPopup(null) }}
-          >
-            <div style={{ minWidth: 160 }}>
-              <p style={{ fontWeight: 600, marginBottom: 4 }}>📍 Adresse</p>
-              <p style={{ fontSize: 12 }}>{banPopup.label}</p>
-              {banPopup.postcode && (
-                <p style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
-                  {banPopup.postcode} {banPopup.city}
-                </p>
-              )}
-            </div>
-          </Popup>
-        )}
-
-        {/* Listener clic carte → BAN geocoding */}
-        <MapClickHandler onMapClick={handleMapClick} />
-
-        {/* Contrôleur de vue */}
         <MapViewController fitBounds={fitBounds} resetSignal={resetSignal} />
       </MapContainer>
     </div>
@@ -390,19 +339,7 @@ export default function InteractiveMap({
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Listener clic carte (enfant de MapContainer)
-// ─────────────────────────────────────────────────────────────────
-function MapClickHandler({ onMapClick }) {
-  useMapEvents({
-    click(e) {
-      onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Légende choroplèthe (bas-gauche de la carte)
+// Légende choroplèthe
 // ─────────────────────────────────────────────────────────────────
 function ColorLegend({ indicatorId }) {
   const isPrice = indicatorId === 'median_price';
@@ -418,9 +355,7 @@ function ColorLegend({ indicatorId }) {
               : 'linear-gradient(to right, #EF4444, #F59E0B, #10B981)',
           }}
         />
-        <span className="text-slate-500">
-          {isPrice ? 'Bas → Élevé' : '0 → 100'}
-        </span>
+        <span className="text-slate-500">{isPrice ? 'Bas → Élevé' : '0 → 100'}</span>
       </div>
     </div>
   );

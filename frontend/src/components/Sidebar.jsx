@@ -4,10 +4,10 @@ export const INDICATOR_OPTIONS = [
   { id: 'livability_score',   label: 'Vivabilité composite', icon: '🏙️' },
   { id: 'connectivity_score', label: 'Connectivité',          icon: '📡' },
   { id: 'mobility_score',     label: 'Mobilité',              icon: '🚲' },
-  { id: 'health_env_score',   label: 'Santé Environnementale',icon: '🌿' },
-  { id: 'tranquility_score',  label: 'Tranquillité',          icon: '🔕' },
+  { id: 'health_env_score',   label: 'Santé Environnementale',icon: '🌿', desc: 'Végétalisation, air pur, îlots de fraîcheur' },
+  { id: 'tranquility_score',  label: 'Tranquillité',          icon: '🔕', desc: 'Sécurité, peu de dynamisme nocturne' },
   { id: 'anime_score',        label: 'Animation',             icon: '🎭' },
-  { id: 'calme_score',        label: 'Calme',                 icon: '😌' },
+  { id: 'calme_score',        label: 'Calme',                 icon: '😌', desc: 'Absence de bruit (Lden)' },
   { id: 'median_price',       label: 'Prix m² médian',        icon: '💶' },
 ];
 

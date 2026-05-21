@@ -4,16 +4,21 @@ Silver Layer — Scoring normalisé 0-100 par arrondissement
 Produit 4 scores stratégiques + les 3 scores historiques du projet,
 tous normalisés en min-max sur [0, 100].
 
-Scores historiques (inchangés) :
-  - score_anime       : densité bars / nightclubs / parcs (OSM)
-  - score_calme       : inverse criminalité + qualité air   [RÉEL, plus placeholder]
-  - score_accessibilite : inverse prix DVF + logement social
+Scores historiques (révisés pour éviter la duplication) :
+  - score_anime          : densité bars / nightclubs / parcs (OSM)
+  - score_calme          : inverse bruit Lden SONLY (score 100 = très calme/silencieux)
+  - score_accessibilite  : inverse prix DVF + logement social
 
 Nouveaux scores stratégiques :
-  - score_connectivity  : fibre + 4G/5G + ratio T2-T3
-  - score_mobility      : disponibilité Vélib' + densité PRIM
-  - score_health_env    : végétalisation + îlots de fraîcheur
-  - score_tranquility   : inverse (crime + bruit + bars/clubs)
+  - score_connectivity   : fibre + 4G/5G + ratio T2-T3
+  - score_mobility       : disponibilité Vélib' + densité PRIM
+  - score_health_env     : végétalisation (30%) + arbres (30%) + îlots (20%) + air_quality (20%)
+  - score_tranquility    : inverse (crime 40% + bruit 35% + bars/clubs 25%)
+
+Changements v2 (2026-05-21) :
+  ✓ Suppression de la duplication "crime" entre calme et tranquility
+  ✓ Redéfinition de calme : SEULEMENT bruit (meilleure sémantique)
+  ✓ Intégration qualité air dans health_env (santé = air pur)
 """
 from __future__ import annotations
 
@@ -143,43 +148,25 @@ class ArrondissementScorer:
 
     def score_calme(self) -> pd.DataFrame:
         """
-        Inverse criminalité + qualité air ATMO.
-        Score 100 = très calme, 0 = très agité.
+        Score Calme basé sur le bruit (Lden) uniquement.
+        Score 100 = très calme (peu de bruit), 0 = très bruyant.
+
+        Note : La qualité de l'air a été déplacée vers score_health_env
+               pour éviter la duplication avec score_tranquility (qui inclut déjà le crime).
         """
+        df = _read_silver("tranquility_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
+        if df.empty:
+            self.logger.warning("Silver tranquility absent — calme_score par défaut 50")
+            base["calme_score"] = 50.0
+            return base[["arrondissement", "calme_score"]]
 
-        # Crime SSMSI
-        df_crime = read_parquet("crime")
-        if not df_crime.empty and "arrondissement" in df_crime.columns:
-            if "year" in df_crime.columns:
-                df_crime = df_crime[df_crime["year"] == df_crime["year"].max()]
-            crime_agg = (
-                df_crime.groupby("arrondissement")["crime_count"]
-                .sum().reset_index(name="crime_total")
-            )
-            base = base.merge(crime_agg, on="arrondissement", how="left")
-        else:
-            base["crime_total"] = pd.NA
+        base = base.merge(df, on="arrondissement", how="left")
+        # Calme = inverse du bruit (Lden: surface exposée au bruit)
+        s_bruit = _normalize(base.get("noise_lden_surface_ha", pd.Series([0.0]*20)), invert=True)
+        base["calme_score"] = s_bruit.round(1)
 
-        # Qualité air Airparif (indice ATMO 1=bon → 6=très mauvais)
-        df_air = read_parquet("air_quality")
-        if not df_air.empty and "arrondissement" in df_air.columns:
-            air_agg = (
-                df_air.groupby("arrondissement")["indice_atmo_num"]
-                .mean().reset_index(name="atmo_mean")
-            )
-            base = base.merge(air_agg, on="arrondissement", how="left")
-        else:
-            base["atmo_mean"] = pd.NA
-
-        # Score calme = moyenne des inverses normalisés
-        score_crime = _normalize(base["crime_total"], invert=True)
-        score_air   = _normalize(base["atmo_mean"],   invert=True)
-        base["calme_score"] = ((score_crime + score_air) / 2).round(1)
-        base["crime_incidents"] = base.get("crime_total", pd.NA)
-        base["air_quality_index"] = base.get("atmo_mean", pd.NA)
-
-        return base[["arrondissement", "crime_incidents", "air_quality_index", "calme_score"]]
+        return base[["arrondissement", "calme_score"]]
 
     def score_accessibilite(self) -> pd.DataFrame:
         """Inverse prix DVF (médian) + % logement social. Score 100 = très accessible."""
@@ -269,8 +256,11 @@ class ArrondissementScorer:
     def score_health_env(self) -> pd.DataFrame:
         """
         Score Santé Environnementale 0-100.
-        Composantes : surface_fraicheur_ha (35%), arbres_per_km2 (35%),
-                      nb_ilots_fraicheur (30%).
+        Composantes : surface_fraicheur_ha (30%), arbres_per_km2 (30%),
+                      nb_ilots_fraicheur (20%), qualité_air Airparif (20%).
+
+        Note : La qualité de l'air a été déplacée depuis score_calme
+               pour une meilleure sémantique (santé = air pur).
         """
         df = _read_silver("health_env_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -280,15 +270,35 @@ class ArrondissementScorer:
             return base
 
         base = base.merge(df, on="arrondissement", how="left")
+
+        # Composantes végétales et thermiques
         s_surface = _normalize(base.get("surface_fraicheur_ha", pd.Series([0.0]*20)))
         s_arbres  = _normalize(base.get("arbres_per_km2",       pd.Series([0.0]*20)))
         s_ilots   = _normalize(base.get("nb_ilots_fraicheur",   pd.Series([0.0]*20)))
 
+        # Qualité air Airparif (indice ATMO 1=bon → 6=très mauvais)
+        df_air = read_parquet("air_quality")
+        if not df_air.empty and "arrondissement" in df_air.columns:
+            air_agg = (
+                df_air.groupby("arrondissement")["indice_atmo_num"]
+                .mean().reset_index(name="atmo_mean")
+            )
+            base = base.merge(air_agg, on="arrondissement", how="left")
+            s_air = _normalize(base["atmo_mean"], invert=True)
+        else:
+            self.logger.warning("Silver air_quality absent — intégré avec poids réduit")
+            s_air = pd.Series([50.0] * len(base))
+
         base["health_env_score"] = (
-            0.35 * s_surface + 0.35 * s_arbres + 0.30 * s_ilots
+            0.30 * s_surface + 0.30 * s_arbres + 0.20 * s_ilots + 0.20 * s_air
         ).round(1)
-        return base[["arrondissement", "surface_fraicheur_ha",
-                     "arbres_per_km2", "nb_ilots_fraicheur", "health_env_score"]]
+
+        result_cols = ["arrondissement", "surface_fraicheur_ha",
+                       "arbres_per_km2", "nb_ilots_fraicheur", "health_env_score"]
+        if "atmo_mean" in base.columns:
+            result_cols.insert(-1, "atmo_mean")
+
+        return base[result_cols]
 
     def score_tranquility(self) -> pd.DataFrame:
         """
