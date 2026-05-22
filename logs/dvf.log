@@ -293,3 +293,45 @@
 2026-05-21T14:00:36 [DEBUG] dvf —   Chunk 100 — lus : 20000000 | conservés Paris : 152135
 2026-05-21T14:00:37 [INFO] dvf — DVF ingestion : 20382915 lignes nationales lues → 189609 transactions parisiennes conservées
 2026-05-21T14:00:37 [INFO] dvf — Parquet sauvegardé → /home/beuhnny/Mast_DE/ProjetDataArchitect/Data_Architecture/data/bronze/dvf_clean/date=2026-05-21/part-0.parquet
+2026-05-22T19:18:47 [INFO] dvf — DVF ingestion locale démarrée — source : /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/dvf/dvf.csv
+2026-05-22T19:18:47 [INFO] dvf — Taille fichier : 3382.2 Mo
+2026-05-22T19:18:54 [DEBUG] dvf —   Chunk 10 — lus : 2000000 | conservés Paris : 0
+2026-05-22T19:19:01 [DEBUG] dvf —   Chunk 20 — lus : 4000000 | conservés Paris : 0
+2026-05-22T19:19:08 [DEBUG] dvf —   Chunk 30 — lus : 6000000 | conservés Paris : 40472
+2026-05-22T19:19:15 [DEBUG] dvf —   Chunk 40 — lus : 8000000 | conservés Paris : 40472
+2026-05-22T19:19:22 [DEBUG] dvf —   Chunk 50 — lus : 10000000 | conservés Paris : 83627
+2026-05-22T19:19:29 [DEBUG] dvf —   Chunk 60 — lus : 12000000 | conservés Paris : 83627
+2026-05-22T19:19:36 [DEBUG] dvf —   Chunk 70 — lus : 14000000 | conservés Paris : 118866
+2026-05-22T19:19:43 [DEBUG] dvf —   Chunk 80 — lus : 16000000 | conservés Paris : 118866
+2026-05-22T19:19:49 [DEBUG] dvf —   Chunk 90 — lus : 18000000 | conservés Paris : 152135
+2026-05-22T19:19:56 [DEBUG] dvf —   Chunk 100 — lus : 20000000 | conservés Paris : 152135
+2026-05-22T19:19:58 [INFO] dvf — DVF ingestion : 20382915 lignes nationales lues → 189609 transactions parisiennes conservées
+2026-05-22T19:19:58 [INFO] dvf — Parquet sauvegardé → /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/dvf_clean/date=2026-05-22/part-0.parquet
+2026-05-22T20:00:00 [INFO] dvf — DVF ingestion locale démarrée — source : /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/dvf/dvf.csv
+2026-05-22T20:00:00 [INFO] dvf — Taille fichier : 3382.2 Mo
+2026-05-22T20:00:07 [DEBUG] dvf —   Chunk 10 — lus : 2000000 | conservés Paris : 0
+2026-05-22T20:00:14 [DEBUG] dvf —   Chunk 20 — lus : 4000000 | conservés Paris : 0
+2026-05-22T20:00:21 [DEBUG] dvf —   Chunk 30 — lus : 6000000 | conservés Paris : 40472
+2026-05-22T20:00:28 [DEBUG] dvf —   Chunk 40 — lus : 8000000 | conservés Paris : 40472
+2026-05-22T20:00:35 [DEBUG] dvf —   Chunk 50 — lus : 10000000 | conservés Paris : 83627
+2026-05-22T20:00:41 [DEBUG] dvf —   Chunk 60 — lus : 12000000 | conservés Paris : 83627
+2026-05-22T20:00:48 [DEBUG] dvf —   Chunk 70 — lus : 14000000 | conservés Paris : 118866
+2026-05-22T20:00:55 [DEBUG] dvf —   Chunk 80 — lus : 16000000 | conservés Paris : 118866
+2026-05-22T20:01:02 [DEBUG] dvf —   Chunk 90 — lus : 18000000 | conservés Paris : 152135
+2026-05-22T20:01:09 [DEBUG] dvf —   Chunk 100 — lus : 20000000 | conservés Paris : 152135
+2026-05-22T20:01:10 [INFO] dvf — DVF ingestion : 20382915 lignes nationales lues → 189609 transactions parisiennes conservées
+2026-05-22T20:01:10 [INFO] dvf — Parquet sauvegardé → /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/dvf_clean/date=2026-05-22/part-0.parquet
+2026-05-22T22:43:56 [INFO] dvf — DVF ingestion locale démarrée — source : /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/dvf/dvf.csv
+2026-05-22T22:43:56 [INFO] dvf — Taille fichier : 3382.2 Mo
+2026-05-22T22:44:03 [DEBUG] dvf —   Chunk 10 — lus : 2000000 | conservés Paris : 0
+2026-05-22T22:44:10 [DEBUG] dvf —   Chunk 20 — lus : 4000000 | conservés Paris : 0
+2026-05-22T22:44:17 [DEBUG] dvf —   Chunk 30 — lus : 6000000 | conservés Paris : 40472
+2026-05-22T22:44:24 [DEBUG] dvf —   Chunk 40 — lus : 8000000 | conservés Paris : 40472
+2026-05-22T22:44:31 [DEBUG] dvf —   Chunk 50 — lus : 10000000 | conservés Paris : 83627
+2026-05-22T22:44:37 [DEBUG] dvf —   Chunk 60 — lus : 12000000 | conservés Paris : 83627
+2026-05-22T22:44:44 [DEBUG] dvf —   Chunk 70 — lus : 14000000 | conservés Paris : 118866
+2026-05-22T22:44:51 [DEBUG] dvf —   Chunk 80 — lus : 16000000 | conservés Paris : 118866
+2026-05-22T22:44:58 [DEBUG] dvf —   Chunk 90 — lus : 18000000 | conservés Paris : 152135
+2026-05-22T22:45:05 [DEBUG] dvf —   Chunk 100 — lus : 20000000 | conservés Paris : 152135
+2026-05-22T22:45:06 [INFO] dvf — DVF ingestion : 20382915 lignes nationales lues → 189609 transactions parisiennes conservées
+2026-05-22T22:45:06 [INFO] dvf — Parquet sauvegardé → /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/dvf_clean/date=2026-05-22/part-0.parquet

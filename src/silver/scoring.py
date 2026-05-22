@@ -277,10 +277,10 @@ class ArrondissementScorer:
         """
         Score Santé Environnementale 0-100.
         Composantes : surface_fraicheur_ha (30%), arbres_per_km2 (30%),
-                      nb_ilots_fraicheur (20%), qualité_air Airparif (20%).
+                      nb_ilots_fraicheur (20%), avg_atmo_index Citeair (20%).
 
-        Note : La qualité de l'air a été déplacée depuis score_calme
-               pour une meilleure sémantique (santé = air pur).
+        avg_atmo_index : indice Citeair moyen [0-100+] agrégé par arrondissement
+        dans le Silver health_env. invert=True → score élevé = air pur.
         """
         df = _read_silver("health_env_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -296,29 +296,32 @@ class ArrondissementScorer:
         s_arbres  = _normalize(base.get("arbres_per_km2",       pd.Series([0.0]*20)))
         s_ilots   = _normalize(base.get("nb_ilots_fraicheur",   pd.Series([0.0]*20)))
 
-        # Qualité air Airparif (indice ATMO 1=bon → 6=très mauvais)
-        df_air = read_parquet("air_quality")
-        if not df_air.empty and "arrondissement" in df_air.columns:
-            air_agg = (
-                df_air.groupby("arrondissement")["indice_atmo_num"]
-                .mean().reset_index(name="atmo_mean")
+        # Qualité air Citeair — avg_atmo_index agrégé dans le Silver health_env
+        # invert=True : Citeair bas (0) = bon air = score haut (100)
+        if "avg_atmo_index" in base.columns:
+            s_air = _normalize(base["avg_atmo_index"], invert=True)
+            self.logger.info(
+                "Score santé : avg_atmo_index min=%.1f max=%.1f",
+                base["avg_atmo_index"].min(),
+                base["avg_atmo_index"].max(),
             )
-            base = base.merge(air_agg, on="arrondissement", how="left")
-            s_air = _normalize(base["atmo_mean"], invert=True)
         else:
-            self.logger.warning("Silver air_quality absent — intégré avec poids réduit")
+            self.logger.warning("avg_atmo_index absent du Silver health_env — s_air par défaut 50")
             s_air = pd.Series([50.0] * len(base))
 
         base["health_env_score"] = (
             0.30 * s_surface + 0.30 * s_arbres + 0.20 * s_ilots + 0.20 * s_air
         ).round(1)
 
-        result_cols = ["arrondissement", "surface_fraicheur_ha",
-                       "arbres_per_km2", "nb_ilots_fraicheur", "health_env_score"]
-        if "atmo_mean" in base.columns:
-            result_cols.insert(-1, "atmo_mean")
-
-        return base[result_cols]
+        result_cols = [
+            "arrondissement",
+            "surface_fraicheur_ha",
+            "arbres_per_km2",
+            "nb_ilots_fraicheur",
+            "avg_atmo_index",
+            "health_env_score",
+        ]
+        return base[[c for c in result_cols if c in base.columns]]
 
     def score_tranquility(self) -> pd.DataFrame:
         """

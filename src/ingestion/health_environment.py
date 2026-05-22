@@ -78,16 +78,13 @@ from .base import build_session, get_logger, save_parquet
 
 LOG_DIR = Path(__file__).parents[2] / "logs"
 
-# Airparif ArcGIS — Explore API v2.1 (portail Arcgis opendata)
-AIRPARIF_ARCGIS_BASE = "https://data-airparif-asso.opendata.arcgis.com/api/explore/v2.1"
-AIRPARIF_STATIONS_DATASET = "mesure-en-continu-identification-des-sites-de-mesure"
-# GeoJSON Hub ArcGIS — alternative si Explore API indisponible
-AIRPARIF_GEOJSON_URL = (
-    "https://data-airparif-asso.opendata.arcgis.com/datasets/"
-    "airparif::mesure-en-continu-identification-des-sites-de-mesure.geojson"
-)
-# Fallback data.gouv.fr si portail Airparif indisponible
-DATAGOUV_API = "https://www.data.gouv.fr/api/1/datasets/"
+# data.gouv.fr — Airparif Indices Citeair journaliers par commune IDF
+# Dataset : "Indices Qualité de l'air (Citeair) journaliers par polluant …"
+# Organisation Airparif (id: 5a4381adc751df74bae4627d)
+# Dataset id : 5a4651eb88ee380bb9eff81e
+DATAGOUV_API         = "https://www.data.gouv.fr/api/1/datasets/"
+AIRPARIF_DATASET_ID  = "5a4651eb88ee380bb9eff81e"
+AIRPARIF_ORG_ID      = "5a4381adc751df74bae4627d"
 
 # Paris Open Data — Explore API v2.1
 PARIS_OD_BASE = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets"
@@ -108,10 +105,12 @@ PAGE_SLEEP_S = 0.15
 # Colonnes Bronze
 # ---------------------------------------------------------------------------
 
-COLS_STATIONS = [
-    "station_id", "station_name", "station_type",
-    "latitude", "longitude", "commune_code", "arrondissement",
-    "polluants", "ingested_at",
+# Citeair : sous-indices NO2, O3, PM10 + indice global max + label
+COLS_ATMO = [
+    "commune_code", "arrondissement", "date_ref",
+    "no2_index", "o3_index", "pm10_index",
+    "indice_atmo_num", "indice_atmo_label",
+    "ingested_at",
 ]
 COLS_ILOTS = [
     "site_id", "nom", "categorie", "surface_ha", "adresse",
@@ -223,139 +222,166 @@ def _paginate_explore(
 
 
 # ---------------------------------------------------------------------------
-# Source 1 — Airparif ArcGIS : stations de mesure
+# Source 1 — Airparif : Indices Citeair journaliers par arrondissement
 # ---------------------------------------------------------------------------
 
-def _fetch_airparif_stations(
+# Seuils Citeair (sous-indices 0–100+) → label lisible
+_CITEAIR_LABELS = [
+    (0,  25,  "très bon"),
+    (25, 50,  "bon"),
+    (50, 75,  "moyen"),
+    (75, 100, "mauvais"),
+    (100, float("inf"), "très mauvais"),
+]
+
+
+def _citeair_label(index: float) -> str:
+    for lo, hi, label in _CITEAIR_LABELS:
+        if lo <= index < hi:
+            return label
+    return "inconnu"
+
+
+def _fetch_airparif_atmo(
     session: Any, logger: Any, ingested_at: datetime
 ) -> pd.DataFrame:
     """
-    Récupère les stations de mesure Airparif.
+    Télécharge les indices Citeair journaliers Airparif depuis data.gouv.fr.
 
-    Ordre de priorité :
-    1. Portail ArcGIS Airparif — Explore API v2.1
-    2. Hub ArcGIS — export GeoJSON direct
-    3. data.gouv.fr — recherche par mots-clés
+    Dataset : "Indices Qualité de l'air (Citeair) journaliers par polluant …"
+    ID      : 5a4651eb88ee380bb9eff81e (Airparif, données 2014-2018)
+
+    Stratégie :
+    1. Récupère la liste des ressources CSV via l'API data.gouv.fr.
+    2. Télécharge tous les CSV disponibles (une archive par mois/an).
+    3. Filtre pour les arrondissements parisiens (ninsee 75101-75120).
+    4. Calcule l'indice Citeair global = max(no2, o3, pm10) par ligne.
+    5. Retourne le DataFrame complet (toutes dates × tous arrondissements).
+
+    Schéma Bronze sortant : COLS_ATMO
+      commune_code, arrondissement, date_ref,
+      no2_index, o3_index, pm10_index, indice_atmo_num, indice_atmo_label,
+      ingested_at
     """
-    import json
+    import io
 
-    records: list[dict] = []
+    PARIS_CODES = {f"751{str(i).zfill(2)}" for i in range(1, 21)}
 
-    # --- Tentative 1 : Explore API ArcGIS ---
-    url = f"{AIRPARIF_ARCGIS_BASE}/catalog/datasets/{AIRPARIF_STATIONS_DATASET}/records"
-    logger.info("Airparif stations (ArcGIS Explore) → %s", url)
-    records = _paginate_explore(
-        session, logger, url,
-        params={"timezone": "UTC"},
-        max_records=500,
-        page_size=100,
-    )
-
-    # --- Tentative 2 : Hub GeoJSON direct ---
-    if not records:
-        logger.warning("ArcGIS Explore vide — essai Hub GeoJSON")
-        try:
-            resp = session.get(AIRPARIF_GEOJSON_URL, timeout=30)
-            if resp.status_code == 200:
-                features = resp.json().get("features", [])
-                records = [
-                    f.get("properties", {}) | {"geometry": f.get("geometry", {})}
-                    for f in features
-                ]
-                logger.info("Hub GeoJSON Airparif : %d stations", len(records))
-        except Exception as exc:
-            logger.warning("Hub GeoJSON échoué : %s", exc)
-
-    # --- Tentative 3 : data.gouv.fr (verify=False — SSL intermédiaire manquant) ---
-    if not records:
-        logger.warning("Airparif indisponible via ArcGIS — recherche data.gouv.fr")
+    # --- Étape 1 : récupérer les URLs des ressources CSV ---
+    logger.info("Airparif ATMO → lecture dataset data.gouv.fr (id=%s)", AIRPARIF_DATASET_ID)
+    csv_urls: list[str] = []
+    try:
+        resp = session.get(
+            f"{DATAGOUV_API}{AIRPARIF_DATASET_ID}/",
+            timeout=15,
+            verify=False,
+        )
+        if resp.status_code != 200:
+            logger.warning("data.gouv.fr dataset HTTP %d — fallback recherche par org", resp.status_code)
+            raise ValueError(f"HTTP {resp.status_code}")
+        for res in resp.json().get("resources", []):
+            if res.get("format", "").lower() == "csv":
+                csv_urls.append(res["url"])
+        logger.info("Airparif ATMO : %d ressources CSV trouvées", len(csv_urls))
+    except Exception as exc:
+        logger.warning("Accès direct dataset échoué (%s) — recherche par org", exc)
+        # Fallback : recherche dans les datasets de l'organisation Airparif
         try:
             resp = session.get(
                 DATAGOUV_API,
-                params={
-                    "q":            "stations de mesure qualité de l'air",
-                    "organization": "airparif",
-                    "page_size":    10,
-                },
+                params={"organization": AIRPARIF_ORG_ID, "page_size": 20},
                 timeout=15,
                 verify=False,
             )
-            if resp.status_code == 200:
-                for ds in resp.json().get("data", []):
+            for ds in resp.json().get("data", []):
+                title = ds.get("title", "").lower()
+                if "citeair" in title or "indice" in title:
                     for res in ds.get("resources", []):
-                        fmt = res.get("format", "").lower()
-                        if fmt in ("geojson", "json", "csv"):
-                            try:
-                                r2 = session.get(res["url"], timeout=30, verify=False)
-                                if r2.status_code == 200:
-                                    data = r2.json()
-                                    if isinstance(data, dict) and "features" in data:
-                                        records = [
-                                            f.get("properties", {}) | {"geometry": f.get("geometry", {})}
-                                            for f in data["features"]
-                                        ]
-                                    elif isinstance(data, list):
-                                        records = data
-                                    if records:
-                                        logger.info("Airparif via data.gouv.fr : %d stations", len(records))
-                                        break
-                            except Exception:
-                                continue
-                    if records:
-                        break
-        except Exception as exc:
-            logger.warning("Recherche data.gouv.fr Airparif échouée : %s", exc)
+                        if res.get("format", "").lower() == "csv":
+                            csv_urls.append(res["url"])
+            logger.info("Fallback org : %d CSV trouvés", len(csv_urls))
+        except Exception as exc2:
+            logger.warning("Fallback org échoué : %s", exc2)
 
-    if not records:
+    if not csv_urls:
         logger.warning(
-            "Airparif stations : aucune donnée récupérée (ArcGIS + GeoJSON + data.gouv.fr) "
-            "— pipeline poursuivi sans données air"
+            "Airparif ATMO : aucune ressource CSV accessible "
+            "— pipeline poursuivi sans données qualité air"
         )
-        return pd.DataFrame(columns=COLS_STATIONS)
+        return pd.DataFrame(columns=COLS_ATMO)
 
-    rows = []
-    for r in records:
-        # Extraction géométrie (geometry ou geo_point_2d selon le format)
-        geom = r.get("geometry", {})
-        geo_pt = r.get("geo_point_2d")
-        if geom and geom.get("type") == "Point":
-            lon, lat = geom.get("coordinates", [None, None])[:2]
-        elif geo_pt:
-            lat, lon = _extract_coords(geo_pt)
-        else:
-            lat, lon = None, None
+    # --- Étape 2 : téléchargement et empilement des CSV ---
+    frames: list[pd.DataFrame] = []
+    for url in csv_urls:
+        logger.debug("Airparif ATMO → téléchargement : %s", url[-60:])
+        try:
+            r = session.get(url, timeout=60, verify=False)
+            if r.status_code != 200:
+                logger.warning("HTTP %d pour %s — ignoré", r.status_code, url[-60:])
+                continue
+            df_raw = pd.read_csv(
+                io.BytesIO(r.content),
+                sep=",", encoding="utf-8", low_memory=False,
+            )
+            if not {"ninsee", "no2", "o3", "pm10"}.issubset(df_raw.columns):
+                logger.debug("Colonnes attendues absentes dans %s — ignoré", url[-40:])
+                continue
+            frames.append(df_raw)
+        except Exception as exc:
+            logger.warning("Erreur téléchargement %s : %s", url[-60:], exc)
 
-        # Code INSEE et arrondissement
-        commune_code = str(r.get("code_insee", r.get("commune_insee", "")) or "")
-        arr = None
-        if commune_code.startswith("751") and len(commune_code) == 5:
-            try:
-                arr = int(commune_code[-2:])
-            except ValueError:
-                arr = None
+    if not frames:
+        logger.warning("Airparif ATMO : aucun CSV parsable — pipeline sans données air")
+        return pd.DataFrame(columns=COLS_ATMO)
 
-        # Liste des polluants
-        polluants_raw = r.get("polluants", r.get("Liste_polluants", r.get("liste_polluants", [])))
-        if isinstance(polluants_raw, list):
-            polluants = json.dumps(polluants_raw, ensure_ascii=False)
-        else:
-            polluants = str(polluants_raw) if polluants_raw else "[]"
+    df_all = pd.concat(frames, ignore_index=True)
+    logger.info("Airparif ATMO brut : %d lignes (tous territoires IDF)", len(df_all))
 
-        rows.append({
-            "station_id":    str(r.get("id_site", r.get("code_site", r.get("objectid", "")))),
-            "station_name":  str(r.get("nom_site", r.get("nom", r.get("libelle", "")))),
-            "station_type":  str(r.get("type_de_site", r.get("type_site", "inconnu"))).lower(),
-            "latitude":      float(lat) if lat is not None else float("nan"),
-            "longitude":     float(lon) if lon is not None else float("nan"),
-            "commune_code":  commune_code,
-            "arrondissement": arr,
-            "polluants":     polluants,
-            "ingested_at":   ingested_at,
-        })
+    # --- Étape 3 : filtre Paris arrondissements ---
+    df_all["ninsee"] = df_all["ninsee"].astype(str).str.strip().str.zfill(5)
+    df_paris = df_all[df_all["ninsee"].isin(PARIS_CODES)].copy()
+    logger.info("Airparif ATMO Paris : %d lignes (20 arrondissements)", len(df_paris))
 
-    df = pd.DataFrame(rows, columns=COLS_STATIONS) if rows else pd.DataFrame(columns=COLS_STATIONS)
-    logger.info("Airparif stations → %d stations", len(df))
-    return df
+    if df_paris.empty:
+        logger.warning("Airparif ATMO : aucun arrondissement parisien dans les données")
+        return pd.DataFrame(columns=COLS_ATMO)
+
+    # --- Étape 4 : construction du Bronze normalisé ---
+    df_paris["commune_code"] = df_paris["ninsee"]
+    df_paris["arrondissement"] = df_paris["ninsee"].str[-2:].astype(int)
+
+    # Parsing de la date DD/MM/YYYY → datetime
+    df_paris["date_ref"] = pd.to_datetime(
+        df_paris["date"], format="%d/%m/%Y", errors="coerce"
+    )
+
+    # Sous-indices numériques
+    for col in ["no2", "o3", "pm10"]:
+        df_paris[col] = pd.to_numeric(df_paris[col], errors="coerce")
+
+    # Indice Citeair global = max des sous-indices (méthode officielle)
+    df_paris["indice_atmo_num"] = df_paris[["no2", "o3", "pm10"]].max(axis=1)
+    df_paris["indice_atmo_label"] = df_paris["indice_atmo_num"].apply(
+        lambda v: _citeair_label(v) if pd.notna(v) else "inconnu"
+    )
+
+    df_out = df_paris[[
+        "commune_code", "arrondissement", "date_ref",
+        "no2", "o3", "pm10",
+        "indice_atmo_num", "indice_atmo_label",
+    ]].rename(columns={"no2": "no2_index", "o3": "o3_index", "pm10": "pm10_index"})
+
+    # Suppression des doublons (même commune × même date)
+    df_out = df_out.drop_duplicates(subset=["commune_code", "date_ref"])
+    df_out["ingested_at"] = ingested_at
+    df_out = df_out[COLS_ATMO].reset_index(drop=True)
+
+    logger.info(
+        "Airparif ATMO → %d lignes — indice moyen Paris : %.1f (Citeair)",
+        len(df_out),
+        df_out["indice_atmo_num"].mean(),
+    )
+    return df_out
 
 
 # ---------------------------------------------------------------------------
@@ -367,31 +393,64 @@ def _fetch_ilots_fraicheur(
 ) -> pd.DataFrame:
     """
     Récupère les espaces verts / îlots de fraîcheur de Paris Open Data.
-    Tente le dataset connu, puis recherche dynamiquement si 404.
-    """
-    dataset_id = ILOTS_DATASET
-    url = f"{PARIS_OD_BASE}/{dataset_id}/records"
-    logger.info("Paris Open Data : îlots de fraîcheur → %s", url)
 
-    # Vérifier que le dataset existe avant de paginer
+    Stratégie :
+      1. Découverte dynamique du dataset_id via le catalogue Paris Open Data
+         (évite les erreurs 404 liées aux changements d'identifiant de dataset)
+      2. Extraction paginée des records depuis le dataset trouvé
+      3. Normalisation vers le schéma Bronze COLS_ILOTS
+
+    Aucune donnée factice : retourne un DataFrame vide si le dataset est introuvable.
+    """
+    # ---- 1. Découverte dynamique du dataset_id ----
+    dataset_id: str | None = None
     try:
-        test = session.get(url, params={"limit": 1, "timezone": "UTC"}, timeout=15)
-        if test.status_code != 200:
+        resp = session.get(
+            PARIS_OD_CATALOG,
+            params={"q": "ilots fraicheur espaces verts", "limit": 3, "timezone": "UTC"},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            # API v2.1 → clé "results" ; ancienne API → clé "datasets"
+            candidates = data.get("results", data.get("datasets", []))
+            for ds in candidates:
+                # Format v2.1 : dataset_id directement dans le dict
+                did = ds.get("dataset_id", "")
+                # Format legacy : imbriqué sous la clé "dataset"
+                if not did:
+                    did = ds.get("dataset", {}).get("dataset_id", "")
+                if did:
+                    dataset_id = did
+                    logger.info(
+                        "Îlots de fraîcheur : dataset découvert dynamiquement → '%s'",
+                        dataset_id,
+                    )
+                    break
+            if dataset_id is None:
+                logger.warning(
+                    "Îlots de fraîcheur : recherche catalogue OK (HTTP 200) "
+                    "mais aucun dataset_id extrait. Réponse : %s",
+                    str(data)[:300],
+                )
+        else:
             logger.warning(
-                "Dataset '%s' introuvable (HTTP %d) — recherche dynamique",
-                dataset_id, test.status_code,
+                "Catalogue Paris Open Data : HTTP %d pour la recherche îlots de fraîcheur",
+                resp.status_code,
             )
-            found = _search_paris_od_dataset(
-                session, logger, "ilots fraicheur espaces verts ouverts public Paris"
-            )
-            if found:
-                dataset_id = found
-                url = f"{PARIS_OD_BASE}/{dataset_id}/records"
-            else:
-                logger.warning("Îlots de fraîcheur : dataset introuvable sur Paris Open Data")
-                return pd.DataFrame(columns=COLS_ILOTS)
     except Exception as exc:
-        logger.warning("Test connectivité îlots échoué : %s", exc)
+        logger.warning("Découverte catalogue Paris Open Data îlots échouée : %s", exc)
+
+    if dataset_id is None:
+        logger.warning(
+            "Îlots de fraîcheur : dataset introuvable sur Paris Open Data — "
+            "Bronze paris_ilots_fraicheur non produit (aucune donnée factice)"
+        )
+        return pd.DataFrame(columns=COLS_ILOTS)
+
+    # ---- 2. Extraction paginée des records ----
+    url = f"{PARIS_OD_BASE}/{dataset_id}/records"
+    logger.info("Îlots de fraîcheur : extraction → %s", url)
 
     records = _paginate_explore(
         session, logger, url,
@@ -401,9 +460,12 @@ def _fetch_ilots_fraicheur(
     )
 
     if not records:
-        logger.warning("Îlots de fraîcheur : aucune donnée reçue depuis '%s'", dataset_id)
+        logger.warning(
+            "Îlots de fraîcheur : aucune donnée reçue depuis le dataset '%s'", dataset_id
+        )
         return pd.DataFrame(columns=COLS_ILOTS)
 
+    # ---- 3. Normalisation ----
     rows = []
     for r in records:
         geo_pt = r.get("geo_point_2d") or r.get("geometry_point") or {}
@@ -412,7 +474,7 @@ def _fetch_ilots_fraicheur(
         arr_raw = r.get("arrondissement", r.get("arr", ""))
         arr = _parse_arrondissement(str(arr_raw)) if arr_raw else None
 
-        # Fallback arrondissement depuis le code postal ou l'adresse
+        # Repli arrondissement depuis le code postal (750XX)
         if arr is None:
             cp = str(r.get("code_postal", "") or "")
             if cp.startswith("750") and len(cp) == 5:
@@ -428,19 +490,19 @@ def _fetch_ilots_fraicheur(
             surface_ha = float("nan")
 
         rows.append({
-            "site_id":       str(r.get("id_zone", r.get("objectid", r.get("identifiant", "")))),
-            "nom":           str(r.get("nom", r.get("libelle", ""))),
-            "categorie":     str(r.get("type_et_libertes", r.get("categorie", r.get("type", "")))).lower(),
-            "surface_ha":    surface_ha,
-            "adresse":       str(r.get("adresse_complete", r.get("adresse", ""))),
+            "site_id":        str(r.get("id_zone", r.get("objectid", r.get("identifiant", "")))),
+            "nom":            str(r.get("nom", r.get("libelle", ""))),
+            "categorie":      str(r.get("type_et_libertes", r.get("categorie", r.get("type", "")))).lower(),
+            "surface_ha":     surface_ha,
+            "adresse":        str(r.get("adresse_complete", r.get("adresse", ""))),
             "arrondissement": arr,
-            "latitude":      float(lat) if lat is not None else float("nan"),
-            "longitude":     float(lon) if lon is not None else float("nan"),
-            "ingested_at":   ingested_at,
+            "latitude":       float(lat) if lat is not None else float("nan"),
+            "longitude":      float(lon) if lon is not None else float("nan"),
+            "ingested_at":    ingested_at,
         })
 
     df = pd.DataFrame(rows, columns=COLS_ILOTS) if rows else pd.DataFrame(columns=COLS_ILOTS)
-    logger.info("Îlots de fraîcheur → %d sites", len(df))
+    logger.info("Îlots de fraîcheur → %d sites (dataset '%s')", len(df), dataset_id)
     return df
 
 
@@ -539,16 +601,16 @@ def ingest() -> pd.DataFrame:
 
     session = build_session(retries=3, backoff_factor=1.0, timeout=30)
 
-    # --- Source 1 : Airparif stations ---
-    logger.info(">>> Source 1/3 : Airparif — stations de mesure")
-    df_stations = _fetch_airparif_stations(session, logger, ingested_at)
-    if not df_stations.empty:
-        path = save_parquet(df_stations, "airparif_stations",
+    # --- Source 1 : Airparif indices Citeair ---
+    logger.info(">>> Source 1/3 : Airparif — Indices Citeair (data.gouv.fr)")
+    df_atmo = _fetch_airparif_atmo(session, logger, ingested_at)
+    if not df_atmo.empty:
+        path = save_parquet(df_atmo, "air_quality",
                             partition_col="date", partition_value=run_date,
                             filename="part-0.parquet")
-        logger.info("Airparif stations → %d lignes : %s", len(df_stations), path)
+        logger.info("Airparif ATMO → %d lignes : %s", len(df_atmo), path)
     else:
-        logger.warning("Airparif stations : aucune donnée — Bronze non créé")
+        logger.warning("Airparif ATMO : aucune donnée — Bronze air_quality non créé")
 
     # --- Source 2 : Îlots de fraîcheur ---
     logger.info(">>> Source 2/3 : Paris Open Data — Îlots de fraîcheur")
@@ -573,7 +635,7 @@ def ingest() -> pd.DataFrame:
         logger.warning("Canopée : aucune donnée — Bronze non créé")
 
     logger.info("Santé Environnementale — ingestion terminée")
-    return df_ilots
+    return df_atmo
 
 
 if __name__ == "__main__":

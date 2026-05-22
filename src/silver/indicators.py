@@ -473,13 +473,14 @@ def build_health_env_silver(
     logger: logging.Logger | None = None,
 ) -> pd.DataFrame:
     """
-    Agrège Airparif stations (cas 2 : sjoin), îlots de fraîcheur (cas 3 : label)
-    et canopée (cas 3 : label) par arrondissement.
+    Agrège la qualité de l'air Citeair (cas 1 : groupby arrondissement),
+    les îlots de fraîcheur (cas 3 : label) et la canopée (cas 3 : label)
+    par arrondissement.
 
     Schéma sortant
     --------------
     arrondissement, nb_ilots_fraicheur, surface_fraicheur_ha,
-    nb_arbres, arbres_per_km2, nb_airparif_stations, computed_at
+    nb_arbres, arbres_per_km2, avg_atmo_index, computed_at
     """
     log = logger or get_logger("silver.health_env", LOG_DIR)
     computed_at = datetime.now(timezone.utc)
@@ -489,26 +490,32 @@ def build_health_env_silver(
     if boundaries_gdf is None or boundaries_gdf.empty:
         boundaries_gdf = _load_boundaries_gdf(log)
 
-    # --- Airparif stations (cas 2 : sjoin) ---
-    df_air = read_parquet("airparif_stations")
-    if not df_air.empty and {"latitude", "longitude"}.issubset(df_air.columns):
-        df_air = df_air[df_air["latitude"].notna() & df_air["longitude"].notna()]
-        df_air = _sjoin_to_arrondissement(
-            df_air, "latitude", "longitude", boundaries_gdf, log
-        )
+    # --- Qualité de l'air Citeair (Bronze air_quality — directement par arrondissement) ---
+    df_air = read_parquet("air_quality")
+    if not df_air.empty and {"arrondissement", "indice_atmo_num"}.issubset(df_air.columns):
+        df_air["arrondissement"] = pd.to_numeric(df_air["arrondissement"], errors="coerce")
+        # Convertir code INSEE 75101-75120 → int 1-20 si besoin
+        mask_insee = df_air["arrondissement"] > 100
+        df_air.loc[mask_insee, "arrondissement"] = df_air.loc[mask_insee, "arrondissement"] % 100
         df_air = df_air.dropna(subset=["arrondissement"])
+        df_air = df_air[df_air["arrondissement"].between(1, 20)]
         df_air["arrondissement"] = df_air["arrondissement"].astype(int)
 
         air_agg = (
-            df_air.groupby("arrondissement")
-            .agg(nb_airparif_stations=("station_id", "nunique"))
-            .reset_index()
+            df_air.groupby("arrondissement")["indice_atmo_num"]
+            .mean()
+            .round(1)
+            .reset_index(name="avg_atmo_index")
         )
         base = base.merge(air_agg, on="arrondissement", how="left")
-        log.info("Airparif stations : %d arrondissements couverts", air_agg["arrondissement"].nunique())
+        log.info(
+            "Qualité air Citeair : %d arrondissements (indice moyen=%.1f)",
+            air_agg["arrondissement"].nunique(),
+            air_agg["avg_atmo_index"].mean(),
+        )
     else:
-        log.warning("Bronze airparif_stations vide — nb_airparif_stations à NA")
-        base["nb_airparif_stations"] = pd.NA
+        log.warning("Bronze air_quality vide ou mal formé — avg_atmo_index à NA")
+        base["avg_atmo_index"] = pd.NA
 
     # --- Îlots de fraîcheur (cas 3 : colonne arrondissement int déjà présente) ---
     df_ilots = read_parquet("paris_ilots_fraicheur")

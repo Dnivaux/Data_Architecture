@@ -2,9 +2,9 @@
 Tranquillité vs Dynamisme — Bronze Ingestion
 =============================================
 Sources :
-  1. Bruitparif — Indicateurs CBS (Cartes de Bruit Stratégique) Île-de-France
-     https://www.bruitparif.fr/opendata-air-bruit/
-     Découverte via data.gouv.fr : organisation Bruitparif
+  1. data.gouv.fr — "Bruit routier - Exposition des Parisien(ne)s aux dépassements
+     des seuils nocturne ou journée complète" (Ville de Paris / Bruitparif)
+     Recherche : GET /api/1/datasets/?q=Bruit+routier+-+Exposition+des+Parisien(ne)s&page_size=5
   2. SSMSI / data.gouv.fr — Délinquance par commune (réf. vers crime.py existant)
      NB : l'ingestion SSMSI est déléguée au module `crime.py` déjà opérationnel.
           Le présent module charge les données Bronze crime pour les exporter
@@ -19,7 +19,7 @@ de chaque arrondissement parisien.
 Architecture Bronze (Medallion)
 --------------------------------
   data/bronze/bruitparif/date=YYYY-MM-DD/part-0.parquet
-     → Indicateurs CBS par commune × source sonore × indicateur
+     → Indicateurs Lden/Ln par arrondissement (source routière)
   data/bronze/crime/  (déjà géré par crime.py, lu ici sans re-téléchargement)
 
 Schéma Bronze — bruitparif
@@ -28,7 +28,7 @@ Schéma Bronze — bruitparif
   arrondissement     int     1–20 pour Paris
   source_bruit       str     routier | ferroviaire | aerien | industrie | total
   indicateur         str     Lden | Ln
-  tranche_db         str     55-59 | 60-64 | 65-69 | 70-74 | 75+
+  tranche_db         str     55-59 | 60-64 | 65-69 | 70-74 | 75+ | ≥55
   surface_ha         float   Surface exposée (ha)
   pop_exposee        int     Population exposée estimée
   pct_pop_exposee    float   % population communale exposée
@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import zipfile
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -59,21 +60,8 @@ from .base import BRONZE_ROOT, build_session, get_logger, read_parquet, save_par
 
 LOG_DIR = Path(__file__).parents[2] / "logs"
 
-DATAGOUV_API = "https://www.data.gouv.fr/api/1/"
-DATAGOUV_ORG_BRUITPARIF = "bruitparif"
-
-# Fallback : fichier CBS tabulaire Bruitparif sur data.gouv.fr
-# (Indicateurs CBS grands axes routiers IDF — commune level)
-BRUITPARIF_FALLBACK_URLS = [
-    # CBS routier IDF — le plus complet pour Paris
-    "https://www.data.gouv.fr/fr/datasets/r/d44e3eff-0bd5-4f31-9e7d-02c33a2d3d02",
-    # CBS ferroviaire IDF
-    "https://www.data.gouv.fr/fr/datasets/r/c4e90c6c-7c5b-4f8a-a1a7-73b2e8e4e6c2",
-]
-
-# ArcGIS REST API Bruitparif (portail alternatif)
-BRUITPARIF_ARCGIS_BASE = "https://bruitparif.opendata.arcgis.com/api/explore/v2.1"
-BRUITPARIF_CBS_DATASET = "indicateurs-cbs-par-commune-ile-de-france"
+DATAGOUV_API      = "https://www.data.gouv.fr/api/1/"
+DATAGOUV_SEARCH_Q = "Bruit routier - Exposition des Parisien(ne)s"
 
 PARIS_CODES = {f"751{str(i).zfill(2)}" for i in range(1, 21)}
 
@@ -109,8 +97,9 @@ _SOURCE_ALIASES: dict[str, str] = {
 # Tranches décibels reconnues (format harmonisé)
 _TRANCHES_DB = ["55-59", "60-64", "65-69", "70-74", "75+"]
 
+
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers génériques
 # ---------------------------------------------------------------------------
 
 def _normalise_source(raw: str) -> str:
@@ -153,7 +142,7 @@ def _bytes_to_df(raw: bytes, logger: Any) -> pd.DataFrame:
     except Exception:
         pass
 
-    # CSV
+    # CSV — plusieurs séparateurs et encodages
     for sep in (";", ",", "\t"):
         for enc in ("utf-8", "latin-1", "utf-8-sig"):
             try:
@@ -193,239 +182,237 @@ def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Stratégie de découverte Bruitparif
+# Parser du dataset Paris bruit routier
 # ---------------------------------------------------------------------------
 
-def _discover_bruitparif_url(session: Any, logger: Any) -> list[str]:
+def _extract_arr_from_colname(col: str) -> list[int]:
     """
-    Cherche les ressources CBS Bruitparif sur data.gouv.fr.
+    Extrait le(s) numéro(s) d'arrondissement depuis un nom de colonne Bruitparif.
+
+    Format attendu (exemples réels) :
+      '... Paris centre ...'  → [1, 2, 3, 4]   (Paris Centre regroupe les 4 premiers)
+      '... 5ème arrdt ...'    → [5]
+      '... 10ème arrdt ...'   → [10]
+      '... 1er arrdt ...'     → [1]
+    """
+    col_l = col.lower()
+
+    # "Paris centre" = arrondissements 1, 2, 3, 4 regroupés
+    if "centre" in col_l:
+        return [1, 2, 3, 4]
+
+    # Ordinaux français : "5ème arrdt", "2e arrdt", "1er arrdt", "1ère arrdt"
+    m = re.search(
+        r"\b(\d{1,2})\s*(?:ème|eme|ière|iere|ier|er|ère|ere|e)\s*"
+        r"(?:arrdt|arrondissement|arr\.?)",
+        col_l,
+    )
+    if m:
+        n = int(m.group(1))
+        return [n] if 1 <= n <= 20 else []
+
+    return []
+
+
+def _parse_bruitparif_paris(
+    df_raw: pd.DataFrame,
+    ingested_at: datetime,
+    logger: Any,
+) -> pd.DataFrame:
+    """
+    Parse le CSV du dataset 'Bruit routier — Exposition des Parisien(ne)s'.
+
+    Format réel : une colonne par arrondissement × indicateur.
+    Exemples de noms de colonnes :
+      'Nbre habitants Paris centre soumis à dépassement VR Lden'
+      'Nbre habitants 5ème arrdt soumis à dépassement VR Lden'
+      'Nbre habitants 10ème arrdt soumis à dépassement VR Ln'
 
     Stratégie :
-    1. Accès direct au dataset par slug
-    2. Recherche par mots-clés "cartes bruit strategiques ile-de-france"
-    3. Recherche par mots-clés "bruitparif CBS communes"
+      1. Identifier chaque colonne comme Lden ou Ln (mot-clé dans le nom)
+      2. Extraire l'arrondissement depuis le nom de la colonne
+      3. "Paris centre" → répartir la valeur ÷ 4 sur les arrondissements 1-4
+      4. Sommer toutes les lignes (plusieurs lignes possibles si multi-sources)
+      5. Construire une ligne par (arrondissement, indicateur) → COLS_BRUIT
+
+    Source bruit = 'routier' (dataset dédié).
+    tranche_db   = '≥55'     (seuils réglementaires Lden 55 dB / Ln 50 dB).
+    surface_ha et pct_pop_exposee = NaN (non disponibles dans ce dataset).
     """
-    urls: list[str] = []
-    FORMATS_OK = ("csv", "zip", "json", "geojson", "xlsx")
-    KEYWORDS_CBS = [
-        "cartes bruit strategiques grands axes routiers ile-de-france",
-        "bruitparif CBS indicateurs communes ile-de-france",
-        "exposition bruit ile-de-france communes",
-    ]
-    CBS_SLUGS = [
-        "cartes-de-bruit-strategiques-des-grands-axes-routiers-nationaux-en-ile-de-france",
-        "bruit-des-infrastructures-routieres-nationales-en-ile-de-france",
-    ]
+    from collections import defaultdict
 
-    # --- Tentative 1 : slugs connus ---
-    for slug in CBS_SLUGS:
-        try:
-            resp = session.get(f"{DATAGOUV_API}{slug}/", timeout=15, verify=False)
-            if resp.status_code == 200:
-                for res in resp.json().get("resources", []):
-                    if res.get("format", "").lower() in FORMATS_OK:
-                        urls.append(res["url"])
-                        logger.info("Bruitparif slug '%s' → %s", slug, res["url"])
-                if urls:
-                    return urls
-        except Exception as exc:
-            logger.debug("Slug Bruitparif '%s' échoué : %s", slug, exc)
+    logger.info("Colonnes brutes (%d) : %s", len(df_raw.columns), list(df_raw.columns))
 
-    # --- Tentative 2 : recherche par mots-clés ---
-    for kw in KEYWORDS_CBS:
-        try:
-            resp = session.get(
-                DATAGOUV_API,
-                params={"q": kw, "page_size": 10, "sort": "-created"},
-                timeout=15,
-                verify=False,
-            )
-            if resp.status_code == 200:
-                for ds in resp.json().get("data", []):
-                    title = ds.get("title", "").lower()
-                    if any(t in title for t in ("bruit", "cbs", "bruitparif", "sonore")):
-                        for res in ds.get("resources", []):
-                            if res.get("format", "").lower() in FORMATS_OK:
-                                urls.append(res["url"])
-                                logger.info("Bruitparif via '%s' : %s", kw[:40], res["url"])
-            if urls:
-                return urls
-        except Exception as exc:
-            logger.warning("Recherche Bruitparif '%s' échouée : %s", kw[:40], exc)
+    # Accumulateur : (arrondissement, indicateur) → pop_exposee cumulée
+    pop_acc: dict[tuple[int, str], float] = defaultdict(float)
+    matched_cols = 0
 
-    return urls
+    for col in df_raw.columns:
+        col_l = col.lower()
 
+        # ---- Identifier l'indicateur depuis le nom de la colonne ----
+        if "lden" in col_l:
+            indicateur = "Lden"
+        elif re.search(r"\bvr\s*ln\b|\bln\b", col_l):
+            indicateur = "Ln"
+        else:
+            continue  # colonne non liée aux indicateurs bruit
 
-def _try_arcgis_bruitparif(session: Any, logger: Any, ingested_at: datetime) -> pd.DataFrame:
-    """
-    Tentative via le portail ArcGIS de Bruitparif (alternative si data.gouv.fr vide).
-    Retourne un DataFrame normalisé ou vide.
-    """
-    import time
+        # ---- Extraire le(s) arrondissement(s) depuis le nom ----
+        arrs = _extract_arr_from_colname(col)
+        if not arrs:
+            logger.debug("Arrondissement non détecté dans la colonne : '%s'", col)
+            continue
 
-    url = f"{BRUITPARIF_ARCGIS_BASE}/catalog/datasets/{BRUITPARIF_CBS_DATASET}/records"
-    logger.info("Bruitparif ArcGIS → %s", url)
+        # Sommer toutes les lignes du CSV (plusieurs lignes = plusieurs sources/routes)
+        col_total = pd.to_numeric(df_raw[col], errors="coerce").fillna(0).sum()
 
-    records: list[dict] = []
-    offset = 0
-    while True:
-        try:
-            resp = session.get(url, params={"limit": 100, "offset": offset, "timezone": "UTC"})
-            if resp.status_code == 404:
-                logger.warning("Dataset ArcGIS Bruitparif introuvable (404)")
-                break
-            if resp.status_code != 200:
-                break
-            data = resp.json()
-            page = data.get("results", [])
-            if not page:
-                break
-            records.extend(page)
-            if len(records) >= data.get("total_count", len(records)):
-                break
-            offset += 100
-            time.sleep(0.2)
-        except Exception:
-            break
+        if len(arrs) > 1:
+            # "Paris centre" → valeur divisée équitablement sur les 4 premiers arr.
+            share = col_total / len(arrs)
+            for arr in arrs:
+                pop_acc[(arr, indicateur)] += share
+        else:
+            pop_acc[(arrs[0], indicateur)] += col_total
 
-    if not records:
+        matched_cols += 1
+        logger.debug(
+            "Colonne '%s' → arr=%s indicateur=%s total=%.0f",
+            col, arrs, indicateur, col_total,
+        )
+
+    if not matched_cols:
+        logger.warning(
+            "Aucune colonne Lden/Ln reconnue dans le dataset. "
+            "Colonnes disponibles : %s", list(df_raw.columns)
+        )
         return pd.DataFrame(columns=COLS_BRUIT)
 
-    return _normalise_bruitparif_records(records, ingested_at)
+    logger.info(
+        "%d colonnes traitées → %d combinaisons (arrondissement × indicateur)",
+        matched_cols, len(pop_acc),
+    )
 
-
-def _normalise_bruitparif_records(records: list[dict], ingested_at: datetime) -> pd.DataFrame:
-    """Normalise une liste de records Bruitparif (quel que soit le format source)."""
-    rows = []
-
-    for r in records:
-        # Code commune
-        code_raw = str(
-            r.get("code_insee", r.get("code_commune", r.get("CODGEO", r.get("insee", "")))) or ""
-        ).strip()
-
-        # Arrondissement
-        arr = None
-        if code_raw in PARIS_CODES:
-            try:
-                arr = int(code_raw[-2:])
-            except ValueError:
-                pass
-
-        # Source sonore
-        src_raw = str(
-            r.get("source_bruit", r.get("source", r.get("type_source", r.get("type", "")))) or ""
-        )
-        source = _normalise_source(src_raw) if src_raw else "total"
-
-        # Indicateur (Lden / Ln)
-        indic_raw = str(r.get("indicateur", r.get("indice", r.get("type_indicateur", "Lden"))) or "Lden")
-        indicateur = "Ln" if "ln" in indic_raw.lower() else "Lden"
-
-        # Tranche décibel
-        tranche_raw = str(
-            r.get("tranche_db", r.get("tranche", r.get("classe_db", r.get("niveau", "")))) or ""
-        ).strip()
-        tranche = tranche_raw if tranche_raw in _TRANCHES_DB else "inconnu"
-
-        # Indicateurs quantitatifs
-        try:
-            surface_ha = float(r.get("surface_ha", r.get("surface", r.get("superficie_ha", 0))) or 0)
-        except (ValueError, TypeError):
-            surface_ha = float("nan")
-
-        try:
-            pop_exposee = int(float(r.get("pop_exposee", r.get("population", r.get("pop", 0))) or 0))
-        except (ValueError, TypeError):
-            pop_exposee = 0
-
-        try:
-            pct = float(r.get("pct_pop_exposee", r.get("pct_pop", r.get("pourcentage_pop", 0))) or 0)
-        except (ValueError, TypeError):
-            pct = float("nan")
-
-        try:
-            annee = int(r.get("annee_ref", r.get("annee", r.get("year", 0))) or 0) or None
-        except (ValueError, TypeError):
-            annee = None
-
+    # ---- Construire le DataFrame COLS_BRUIT ----
+    rows: list[dict] = []
+    for (arr, indicateur), pop in sorted(pop_acc.items()):
         rows.append({
-            "commune_code":    code_raw,
+            "commune_code":    f"751{str(arr).zfill(2)}",
             "arrondissement":  arr,
-            "source_bruit":    source,
+            "source_bruit":    "routier",
             "indicateur":      indicateur,
-            "tranche_db":      tranche,
-            "surface_ha":      surface_ha,
-            "pop_exposee":     pop_exposee,
-            "pct_pop_exposee": pct,
-            "annee_ref":       annee,
+            "tranche_db":      "≥55",
+            "surface_ha":      float("nan"),        # non disponible dans ce dataset
+            "pop_exposee":     int(round(pop)),
+            "pct_pop_exposee": float("nan"),        # non disponible dans ce dataset
+            "annee_ref":       None,
             "ingested_at":     ingested_at,
         })
 
-    df = pd.DataFrame(rows, columns=COLS_BRUIT) if rows else pd.DataFrame(columns=COLS_BRUIT)
-    # Filtre Paris uniquement
-    df_paris = df[df["commune_code"].isin(PARIS_CODES)].copy()
-    return df_paris.reset_index(drop=True)
+    if not rows:
+        logger.warning("Aucune ligne générée après parsing des colonnes Bruitparif")
+        return pd.DataFrame(columns=COLS_BRUIT)
+
+    df = pd.DataFrame(rows, columns=COLS_BRUIT)
+    logger.info(
+        "Bruitparif Paris : %d lignes, %d arrondissements couverts, indicateurs=%s",
+        len(df),
+        df["arrondissement"].nunique(),
+        sorted(df["indicateur"].unique()),
+    )
+    return df.reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------
-# Récupération principale Bruitparif
+# Recherche et récupération sur data.gouv.fr
 # ---------------------------------------------------------------------------
+
+def _search_bruitparif_resources(session: Any, logger: Any) -> list[str]:
+    """
+    Cherche les ressources CSV du dataset Bruitparif Paris sur data.gouv.fr.
+
+    Requête : GET /api/1/datasets/?q=<DATAGOUV_SEARCH_Q>&page_size=5
+    Retourne la liste des URLs CSV trouvées, dans l'ordre de pertinence.
+    """
+    try:
+        resp = session.get(
+            f"{DATAGOUV_API}datasets/",
+            params={"q": DATAGOUV_SEARCH_Q, "page_size": 5},
+            timeout=15,
+            verify=False,
+        )
+        if resp.status_code != 200:
+            logger.warning(
+                "data.gouv.fr search HTTP %d (q='%s')", resp.status_code, DATAGOUV_SEARCH_Q
+            )
+            return []
+
+        urls: list[str] = []
+        for ds in resp.json().get("data", []):
+            title = ds.get("title", "")
+            logger.info("Dataset candidat : %s", title)
+            for res in ds.get("resources", []):
+                fmt = (res.get("format") or "").lower()
+                url = res.get("url", "")
+                if url and (fmt == "csv" or url.lower().endswith(".csv")):
+                    logger.info("  Ressource CSV : %s → %s", res.get("title", ""), url)
+                    urls.append(url)
+
+        if not urls:
+            logger.warning(
+                "Aucune ressource CSV dans les résultats data.gouv.fr pour '%s'",
+                DATAGOUV_SEARCH_Q,
+            )
+        return urls
+
+    except Exception as exc:
+        logger.error("Erreur recherche data.gouv.fr Bruitparif : %s", exc)
+        return []
+
 
 def _fetch_bruitparif(session: Any, logger: Any, ingested_at: datetime) -> pd.DataFrame:
     """
-    Orchestration multi-tentatives pour Bruitparif :
-    1. Découverte dynamique via data.gouv.fr
-    2. URLs de fallback connues
-    3. Portail ArcGIS Bruitparif
+    Orchestration :
+      1. Recherche du dataset via data.gouv.fr API (mot-clé exact)
+      2. Téléchargement + parsing du premier CSV valide trouvé
     """
-    # --- Tentative 1 : découverte data.gouv.fr ---
-    discovered_urls = _discover_bruitparif_url(session, logger)
-    all_urls = discovered_urls + BRUITPARIF_FALLBACK_URLS
+    urls = _search_bruitparif_resources(session, logger)
 
-    for url in all_urls:
-        logger.info("Bruitparif → essai : %s", url)
+    if not urls:
+        logger.warning(
+            "Bruitparif : aucune ressource CSV disponible. "
+            "Vérifier le dataset '%s' sur data.gouv.fr", DATAGOUV_SEARCH_Q
+        )
+        return pd.DataFrame(columns=COLS_BRUIT)
+
+    for url in urls:
+        logger.info("Téléchargement Bruitparif : %s", url)
         try:
-            resp = session.get(url, verify=False)
+            resp = session.get(url, timeout=60, verify=False)
             if resp.status_code != 200:
-                logger.warning("HTTP %d", resp.status_code)
+                logger.warning("HTTP %d sur %s", resp.status_code, url)
                 continue
 
             df_raw = _bytes_to_df(resp.content, logger)
             if df_raw.empty:
-                logger.warning("Fichier vide ou non parsable")
+                logger.warning("Fichier vide ou non parsable : %s", url)
                 continue
 
-            logger.info("Bruitparif brut : %d × %d", *df_raw.shape)
+            logger.info("Bruitparif brut : %d lignes × %d colonnes", *df_raw.shape)
 
-            # Filtrer Paris si possible
-            code_col = _find_col(df_raw, ["code_insee", "code_commune", "CODGEO", "insee"])
-            if code_col:
-                df_paris = df_raw[df_raw[code_col].astype(str).str.strip().isin(PARIS_CODES)].copy()
-                if df_paris.empty:
-                    logger.debug("Aucun arrondissement parisien dans ce fichier")
-                    continue
-                records = df_paris.to_dict("records")
-            else:
-                records = df_raw.to_dict("records")
-
-            df = _normalise_bruitparif_records(records, ingested_at)
+            df = _parse_bruitparif_paris(df_raw, ingested_at, logger)
             if not df.empty:
-                logger.info("Bruitparif Paris → %d lignes (source : %s)", len(df), url)
+                logger.info(
+                    "Bruitparif → %d lignes retenues (source : %s)", len(df), url
+                )
                 return df
 
         except Exception as exc:
             logger.warning("Erreur sur %s : %s", url, exc)
 
-    # --- Tentative 2 : portail ArcGIS ---
-    logger.info("Tentative ArcGIS Bruitparif...")
-    df_arcgis = _try_arcgis_bruitparif(session, logger, ingested_at)
-    if not df_arcgis.empty:
-        return df_arcgis
-
     logger.warning(
-        "Bruitparif : toutes les sources ont échoué. "
-        "Vérifier la disponibilité de l'OpenData sur https://www.bruitparif.fr/opendata-air-bruit/"
+        "Bruitparif : toutes les ressources ont échoué. "
+        "Vérifier la disponibilité du dataset '%s' sur data.gouv.fr", DATAGOUV_SEARCH_Q
     )
     return pd.DataFrame(columns=COLS_BRUIT)
 
@@ -459,8 +446,8 @@ def ingest() -> pd.DataFrame:
     Ingère les données de l'indicateur Tranquillité vs Dynamisme.
 
     Stratégie :
-      - Bruitparif CBS → téléchargement + normalisation → Bronze
-      - SSMSI crime → lecture du Bronze existant (crime.py) sans re-téléchargement
+      - Bruitparif (data.gouv.fr) → téléchargement + parsing → Bronze bruitparif
+      - SSMSI crime               → lecture Bronze existant (crime.py)
 
     Sauvegarde :
       data/bronze/bruitparif/date=<date>/part-0.parquet
@@ -468,7 +455,7 @@ def ingest() -> pd.DataFrame:
     Retourne
     --------
     pd.DataFrame
-        DataFrame Bruitparif (source principale de ce module).
+        DataFrame Bruitparif normalisé (source principale de ce module).
     """
     logger = get_logger("tranquility", LOG_DIR)
     ingested_at = datetime.now(timezone.utc)
@@ -480,8 +467,8 @@ def ingest() -> pd.DataFrame:
 
     session = build_session(retries=3, backoff_factor=2.0, timeout=60)
 
-    # --- Source 1 : Bruitparif CBS ---
-    logger.info(">>> Source 1/2 : Bruitparif — CBS Île-de-France")
+    # --- Source 1 : Bruitparif (data.gouv.fr) ---
+    logger.info(">>> Source 1/2 : Bruitparif — Bruit routier Paris (data.gouv.fr)")
     df_bruit = _fetch_bruitparif(session, logger, ingested_at)
     if not df_bruit.empty:
         path = save_parquet(
@@ -513,11 +500,10 @@ if __name__ == "__main__":
     if not result.empty:
         print("\n--- Aperçu Bruitparif (Bronze) ---")
         print(result.head(15).to_string(index=False))
-        print(f"\nShape         : {result.shape}")
-        print(f"Sources bruit : {sorted(result['source_bruit'].unique())}")
-        print(f"Indicateurs   : {sorted(result['indicateur'].unique())}")
-        print(f"Tranches dB   : {sorted(result['tranche_db'].unique())}")
+        print(f"\nShape          : {result.shape}")
+        print(f"Arrondissements: {sorted(result['arrondissement'].dropna().unique())}")
+        print(f"Indicateurs    : {sorted(result['indicateur'].unique())}")
+        print(f"Source bruit   : {sorted(result['source_bruit'].unique())}")
     else:
         print("Aucune donnée Bruitparif disponible.")
-        print("Conseil : vérifier https://www.bruitparif.fr/opendata-air-bruit/")
-        print("          et ajouter la bonne URL dans BRUITPARIF_FALLBACK_URLS")
+        print(f"Conseil : vérifier le dataset '{DATAGOUV_SEARCH_Q}' sur data.gouv.fr")
