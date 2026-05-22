@@ -148,24 +148,12 @@ class ArrondissementScorer:
 
     def score_calme(self) -> pd.DataFrame:
         """
-        Score Calme basé sur le bruit (Lden) uniquement.
-        Score 100 = très calme (peu de bruit), 0 = très bruyant.
-
-        Note : La qualité de l'air a été déplacée vers score_health_env
-               pour éviter la duplication avec score_tranquility (qui inclut déjà le crime).
+        [DÉPRÉCIÉ v2] Score Calme fusionné dans score_tranquility.
+        Retourne calme_score=None pour compatibilité descendante.
+        La logique bruit est désormais intégrée à score_tranquility (60%).
         """
-        df = _read_silver("tranquility_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
-        if df.empty:
-            self.logger.warning("Silver tranquility absent — calme_score par défaut 50")
-            base["calme_score"] = 50.0
-            return base[["arrondissement", "calme_score"]]
-
-        base = base.merge(df, on="arrondissement", how="left")
-        # Calme = inverse du bruit (Lden: surface exposée au bruit)
-        s_bruit = _normalize(base.get("noise_lden_surface_ha", pd.Series([0.0]*20)), invert=True)
-        base["calme_score"] = s_bruit.round(1)
-
+        base["calme_score"] = None
         return base[["arrondissement", "calme_score"]]
 
     def score_accessibilite(self) -> pd.DataFrame:
@@ -302,10 +290,19 @@ class ArrondissementScorer:
 
     def score_tranquility(self) -> pd.DataFrame:
         """
-        Score Tranquillité 0-100.
-        Composantes : crime (invert, 40%), bruit Lden (invert, 35%),
-                      nb_bars+clubs (invert, 25%).
-        Note : un score élevé signifie arrondissement TRANQUILLE (pas dynamique).
+        Score Tranquillité (fusion Calme + Tranquillité) v2 — 0-100.
+        Mesure les nuisances sonores et nocturnes UNIQUEMENT.
+
+        Composantes :
+          - bruit Lden (surface exposée ≥55 dB)  → 60%  [fusion de l'ancien Calme]
+          - densité bars + boîtes de nuit         → 40%
+
+        Crime exclu volontairement : la criminalité reste visible en
+        « Métriques détaillées » (crime_count_total, crime_rate_per_1000)
+        mais n'influence plus ce score pour ne pas le confondre avec la sécurité.
+
+        Score 100 = arrondissement silencieux, peu de vie nocturne.
+        Score   0 = arrondissement bruyant avec forte densité bars/clubs.
         """
         df = _read_silver("tranquility_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -315,20 +312,25 @@ class ArrondissementScorer:
             return base
 
         base = base.merge(df, on="arrondissement", how="left")
-        s_crime = _normalize(base.get("crime_count_total",      pd.Series([0.0]*20)), invert=True)
-        s_bruit = _normalize(base.get("noise_lden_surface_ha",  pd.Series([0.0]*20)), invert=True)
 
+        # Bruit Lden (surface en ha exposée ≥ 55 dB) : plus bas = plus calme
+        s_bruit = _normalize(
+            base.get("noise_lden_surface_ha", pd.Series([0.0] * 20)), invert=True
+        )
+
+        # Vie nocturne : bars + nightclubs (OSM). Plus bas = plus tranquille.
         nightlife = (
-            pd.to_numeric(base.get("nb_bars", pd.Series([0.0]*20)), errors="coerce").fillna(0)
-            + pd.to_numeric(base.get("nb_nightclubs", pd.Series([0.0]*20)), errors="coerce").fillna(0)
+            pd.to_numeric(base.get("nb_bars",      pd.Series([0.0] * 20)), errors="coerce").fillna(0)
+            + pd.to_numeric(base.get("nb_nightclubs", pd.Series([0.0] * 20)), errors="coerce").fillna(0)
         )
         s_nightlife = _normalize(nightlife, invert=True)
 
-        base["tranquility_score"] = (
-            0.40 * s_crime + 0.35 * s_bruit + 0.25 * s_nightlife
-        ).round(1)
-        return base[["arrondissement", "crime_count_total", "noise_lden_surface_ha",
-                     "nb_bars", "nb_nightclubs", "tranquility_score"]]
+        base["tranquility_score"] = (0.60 * s_bruit + 0.40 * s_nightlife).round(1)
+
+        # crime_count_total et crime_rate_per_1000 conservés comme métriques brutes
+        return base[["arrondissement", "crime_count_total", "crime_rate_per_1000",
+                     "noise_lden_surface_ha", "nb_bars", "nb_nightclubs",
+                     "tranquility_score"]]
 
     # ------------------------------------------------------------------
     # Orchestrateur global (interface publique pour aggregation.py)

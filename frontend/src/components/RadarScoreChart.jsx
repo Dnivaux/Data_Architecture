@@ -4,12 +4,11 @@ import {
 } from 'recharts';
 
 const SCORE_AXES = [
-  { key: 'anime_score',         label: 'Animation'   },
-  { key: 'calme_score',         label: 'Calme'        },
+  { key: 'anime_score',         label: 'Animation'    },
+  { key: 'tranquility_score',   label: 'Tranquillité' },
   { key: 'connectivity_score',  label: 'Connectivité' },
   { key: 'mobility_score',      label: 'Mobilité'     },
   { key: 'health_env_score',    label: 'Santé Env.'   },
-  { key: 'tranquility_score',   label: 'Tranquillité' },
   { key: 'accessibilite_score', label: 'Accessibilité'},
 ];
 

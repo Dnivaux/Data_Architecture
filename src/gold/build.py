@@ -69,15 +69,15 @@ _NOMS_ARR = {
     17: "Paris 17e", 18: "Paris 18e", 19: "Paris 19e", 20: "Paris 20e",
 }
 
-# Poids du score composite de vivabilité globale
+# Poids du score composite de vivabilité globale (v2 — calme fusionné dans tranquility)
 _LIVABILITY_WEIGHTS = {
-    "anime_score":        0.10,
-    "calme_score":        0.15,
-    "accessibilite_score": 0.15,
-    "connectivity_score": 0.15,
-    "mobility_score":     0.15,
-    "health_env_score":   0.15,
-    "tranquility_score":  0.15,
+    "anime_score":         0.10,
+    # calme_score supprimé (fusionné dans tranquility_score v2)
+    "accessibilite_score": 0.18,
+    "connectivity_score":  0.18,
+    "mobility_score":      0.18,
+    "health_env_score":    0.18,
+    "tranquility_score":   0.18,
 }
 
 

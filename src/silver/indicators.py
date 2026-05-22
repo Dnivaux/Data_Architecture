@@ -111,9 +111,13 @@ def _sjoin_to_arrondissement(
         df["arrondissement"] = pd.NA
         return df
 
+    # Supprimer la colonne 'arrondissement' du GDF de gauche si elle existe déjà
+    # pour éviter que geopandas la renomme en 'arrondissement_left'/'arrondissement_right'
+    valid_for_join = valid.drop(columns=["arrondissement"], errors="ignore")
+
     gdf_pts = gpd.GeoDataFrame(
-        valid,
-        geometry=gpd.points_from_xy(valid[lon_col], valid[lat_col]),
+        valid_for_join,
+        geometry=gpd.points_from_xy(valid_for_join[lon_col], valid_for_join[lat_col]),
         crs="EPSG:4326",
     )
     joined = gpd.sjoin(
@@ -124,6 +128,15 @@ def _sjoin_to_arrondissement(
     )
     # gpd.sjoin peut dupliquer si un point touche deux polygones (rare)
     joined = joined[~joined.index.duplicated(keep="first")]
+
+    # Sécurité : gérer le renommage residuel _right
+    if "arrondissement" not in joined.columns and "arrondissement_right" in joined.columns:
+        joined = joined.rename(columns={"arrondissement_right": "arrondissement"})
+
+    if "arrondissement" not in joined.columns:
+        logger.warning("sjoin : colonne 'arrondissement' absente du résultat (%s)", list(joined.columns)[:8])
+        df["arrondissement"] = pd.NA
+        return df
 
     df.loc[valid.index, "arrondissement"] = joined["arrondissement"].reindex(valid.index)
     return df
@@ -282,46 +295,81 @@ def build_mobility_silver(
     if boundaries_gdf is None or boundaries_gdf.empty:
         boundaries_gdf = _load_boundaries_gdf(log)
 
-    # --- Vélib' (cas 2 : sjoin lat/lon) ---
+    # --- Vélib' ---
     df_vel = read_parquet("velib")
-    # Normalise les noms de colonnes (anciens fichiers utilisaient lat/lon)
-    df_vel = df_vel.rename(columns={"lat": "latitude", "lon": "longitude"}, errors="ignore")
-    if not df_vel.empty and {"latitude", "longitude"}.issubset(df_vel.columns):
-        df_vel = _sjoin_to_arrondissement(
-            df_vel, "latitude", "longitude", boundaries_gdf, log
-        )
+    if not df_vel.empty:
+        # Cas A — colonne 'arrondissement' déjà présente en texte ("Paris 16e", "Hors Paris")
+        if "arrondissement" in df_vel.columns and df_vel["arrondissement"].dtype == object:
+            df_vel["arrondissement"] = (
+                df_vel["arrondissement"].astype(str)
+                .str.extract(r"Paris\s+(\d+)", expand=False)
+                .pipe(pd.to_numeric, errors="coerce")
+                .astype("Int64")
+            )
+        # Cas B — colonne 'arrondissement' numérique déjà présente (OK tel quel)
+        elif "arrondissement" in df_vel.columns:
+            df_vel["arrondissement"] = pd.to_numeric(
+                df_vel["arrondissement"], errors="coerce"
+            ).astype("Int64")
+        # Cas C — aucune colonne arrondissement : sjoin lat/lon
+        else:
+            # Dédupliquer les colonnes lat/lon si le rename créerait des doublons
+            df_vel = df_vel.loc[:, ~df_vel.columns.duplicated()]
+            df_vel = df_vel.rename(
+                columns={"lat": "latitude", "lon": "longitude"}, errors="ignore"
+            )
+            if {"latitude", "longitude"}.issubset(df_vel.columns):
+                df_vel = _sjoin_to_arrondissement(
+                    df_vel, "latitude", "longitude", boundaries_gdf, log
+                )
+
         df_vel = df_vel.dropna(subset=["arrondissement"])
         df_vel["arrondissement"] = df_vel["arrondissement"].astype(int)
 
-        # Taux d'occupation vélos = bikes / capacité
-        df_vel["bikes_pct"] = (
-            df_vel["bikes_available"] / df_vel["total_capacity"].replace(0, pd.NA) * 100
-        )
-        # Ratio électrique
-        df_vel["electric_ratio"] = (
-            df_vel["electric_bikes"] / df_vel["bikes_available"].replace(0, pd.NA) * 100
-        )
+        # Normaliser noms de colonnes (schémas historiques possibles)
+        col_bikes  = next((c for c in ["bikes_available",  "numBikesAvailable"]  if c in df_vel.columns), None)
+        col_docks  = next((c for c in ["docks_available",  "numDocksAvailable"]  if c in df_vel.columns), None)
+        col_cap    = next((c for c in ["total_capacity",   "capacity"]           if c in df_vel.columns), None)
+        col_elec   = next((c for c in ["electric_bikes",   "numEBikesAvailable"] if c in df_vel.columns), None)
+        col_code   = next((c for c in ["station_code",     "stationCode"]        if c in df_vel.columns), None)
 
-        vel_agg = (
-            df_vel.groupby("arrondissement")
-            .agg(
-                station_count_velib=("station_code", "nunique"),
-                avg_bikes_available=("bikes_available", "mean"),
-                avg_docks_available=("docks_available", "mean"),
-                avg_bikes_pct=("bikes_pct", "mean"),
-                electric_bike_ratio=("electric_ratio", "mean"),
+        if col_bikes:
+            df_vel["bikes_pct"] = (
+                pd.to_numeric(df_vel[col_bikes], errors="coerce") /
+                pd.to_numeric(df_vel[col_cap], errors="coerce").replace(0, pd.NA) * 100
+            ) if col_cap else pd.NA
+        if col_elec and col_bikes:
+            df_vel["electric_ratio"] = (
+                pd.to_numeric(df_vel[col_elec], errors="coerce") /
+                pd.to_numeric(df_vel[col_bikes], errors="coerce").replace(0, pd.NA) * 100
             )
-            .reset_index()
-        )
-        for col in ["avg_bikes_available", "avg_docks_available",
-                    "avg_bikes_pct", "electric_bike_ratio"]:
-            vel_agg[col] = vel_agg[col].round(2)
 
-        base = base.merge(vel_agg, on="arrondissement", how="left")
-        log.info("Vélib' agrégé : %d arrondissements, %d batches",
-                 vel_agg["arrondissement"].nunique(), df_vel["batch_ts"].nunique() if "batch_ts" in df_vel.columns else 0)
+        agg_dict = {}
+        if col_code:   agg_dict["station_count_velib"]  = (col_code,  "nunique")
+        if col_bikes:  agg_dict["avg_bikes_available"]   = (col_bikes, "mean")
+        if col_docks:  agg_dict["avg_docks_available"]   = (col_docks, "mean")
+        if "bikes_pct" in df_vel.columns:
+            agg_dict["avg_bikes_pct"] = ("bikes_pct", "mean")
+        if "electric_ratio" in df_vel.columns:
+            agg_dict["electric_bike_ratio"] = ("electric_ratio", "mean")
+
+        if agg_dict:
+            vel_agg = df_vel.groupby("arrondissement").agg(**agg_dict).reset_index()
+            for col in ["avg_bikes_available", "avg_docks_available",
+                        "avg_bikes_pct", "electric_bike_ratio"]:
+                if col in vel_agg.columns:
+                    vel_agg[col] = vel_agg[col].round(2)
+            base = base.merge(vel_agg, on="arrondissement", how="left")
+            batches = df_vel["batch_ts"].nunique() if "batch_ts" in df_vel.columns else "?"
+            log.info("Vélib' agrégé : %d arrondissements, %s batches",
+                     vel_agg["arrondissement"].nunique(), batches)
+        else:
+            log.warning("Vélib' : aucune colonne connue (bikes_available…)")
+            for col in ["station_count_velib", "avg_bikes_available",
+                        "avg_docks_available", "avg_bikes_pct", "electric_bike_ratio"]:
+                base[col] = pd.NA
     else:
-        log.warning("Bronze velib vide ou pas de coordonnées — colonnes mobilité à NA")
+        log.warning("Bronze velib vide — colonnes mobilité à NA")
         for col in ["station_count_velib", "avg_bikes_available", "avg_docks_available",
                     "avg_bikes_pct", "electric_bike_ratio"]:
             base[col] = pd.NA
