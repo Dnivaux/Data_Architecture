@@ -31,12 +31,12 @@ export default function KPICard({
     <div
       className={`card flex flex-col gap-3 relative overflow-hidden
         ${isClickable ? 'card-hover' : ''}
-        ${isLive ? 'ring-1 ring-[#22C55E]/40' : ''}`}
+        ${isLive ? 'ring-1 ring-[#2EC4B6]/40' : ''}`}
       onClick={onClick}
     >
       {/* Halo de fond pour les cartes live */}
       {isLive && (
-        <div className="absolute inset-0 bg-[#22C55E]/5 pointer-events-none" />
+        <div className="absolute inset-0 bg-[#2EC4B6]/5 pointer-events-none" />
       )}
 
       {/* En-tête */}
@@ -51,8 +51,8 @@ export default function KPICard({
         {/* Badge LIVE */}
         {isLive && (
           <span className="relative flex h-2 w-2 mt-0.5">
-            <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-[#22C55E] opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#22C55E]" />
+            <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-[#2EC4B6] opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2EC4B6]" />
           </span>
         )}
       </div>
@@ -65,7 +65,7 @@ export default function KPICard({
         {trend && (
           <span
             className={`text-xs font-medium pb-0.5 ${
-              trendUp ? 'text-[#22C55E]' : 'text-[#F43F5E]'
+              trendUp ? 'text-[#34D399]' : 'text-[#0F4C81]'
             }`}
           >
             {trend}

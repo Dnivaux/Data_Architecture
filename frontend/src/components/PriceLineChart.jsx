@@ -36,7 +36,7 @@ export default function PriceLineChart({ prices, loading }) {
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-[#64748B] uppercase tracking-wide">Prix médian DVF</span>
         {trend && (
-          <span className={`text-xs font-medium ${+trend >= 0 ? 'text-[#F43F5E]' : 'text-[#22C55E]'}`}>
+          <span className={`text-xs font-medium ${+trend >= 0 ? 'text-[#0F4C81]' : 'text-[#34D399]'}`}>
             {+trend >= 0 ? '+' : ''}{trend} % depuis {first?.year}
           </span>
         )}
@@ -66,15 +66,15 @@ export default function PriceLineChart({ prices, loading }) {
               fontSize: 12,
             }}
             labelStyle={{ color: '#1E293B' }}
-            itemStyle={{ color: '#0284C7' }}
+            itemStyle={{ color: '#0F4C81' }}
             formatter={(v) => [`${fmtInt(v)} €/m²`, 'Prix médian']}
           />
           <Line
             type="monotone"
             dataKey="median_price"
-            stroke="#0284C7"
+            stroke="#0F4C81"
             strokeWidth={2}
-            dot={{ fill: '#0284C7', r: 3 }}
+            dot={{ fill: '#2EC4B6', r: 3 }}
             activeDot={{ r: 5 }}
             connectNulls
           />

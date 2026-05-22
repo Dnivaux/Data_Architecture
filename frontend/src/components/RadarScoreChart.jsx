@@ -60,8 +60,8 @@ export default function RadarScoreChart({ primary, secondary, labelA = 'Sélecti
         <Radar
           name={labelA}
           dataKey={labelA}
-          stroke="#0284C7"
-          fill="#0284C7"
+          stroke="#0F4C81"
+          fill="#0F4C81"
           fillOpacity={0.35}
           strokeWidth={2}
         />
@@ -69,8 +69,8 @@ export default function RadarScoreChart({ primary, secondary, labelA = 'Sélecti
           <Radar
             name={labelB}
             dataKey={labelB}
-            stroke="#38BDF8"
-            fill="#38BDF8"
+            stroke="#2EC4B6"
+            fill="#2EC4B6"
             fillOpacity={0.25}
             strokeWidth={2}
           />

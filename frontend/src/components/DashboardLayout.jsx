@@ -1,4 +1,4 @@
-import Sidebar from './Sidebar';
+import Sidebar, { INDICATOR_OPTIONS } from './Sidebar';
 import KPIGrid from './KPIGrid';
 import InteractiveMap from './InteractiveMap';
 import AnalyticsPanel from './AnalyticsPanel';
@@ -44,15 +44,8 @@ export default function DashboardLayout({
   return (
     <div className="flex h-screen overflow-hidden">
 
-      {/* ── Sidebar ── */}
-      <Sidebar
-        selectedIndicator={selectedIndicator}
-        onIndicatorChange={onIndicatorChange}
-        liveMetrics={liveMetrics}
-        globalStats={globalStats}
-        showChantiers={showChantiers}
-        onToggleChantiers={() => setShowChantiers((v) => !v)}
-      />
+      {/* Sidebar hidden — controls migrated to header (to be removed later) */}
+      <aside className="hidden" />
 
       {/* ── Zone principale ── */}
       <div className="flex flex-col flex-1 overflow-hidden">
@@ -60,16 +53,39 @@ export default function DashboardLayout({
         {/* Header */}
         <header className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-[#D0D7DE] bg-[#F4F6F9]">
           <div>
-            <h1 className="text-base font-bold text-[#1E293B]">
+            <h1 className="text-base font-bold text-[#0F3B81]">
               {selectedArrondissement
                 ? `Paris ${selectedArrondissement}e arrondissement`
                 : 'Paris — Vue globale'}
             </h1>
             <p className="text-xs text-[#64748B]">
-              Données Medallion · Gold Layer · PostgreSQL
+              Analyse de la qualité de vie
             </p>
           </div>
+
+          {/* Controls migrated from the sidebar: indicator selector + chantiers toggle */}
           <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-[#64748B] mr-2">Indicateur</label>
+              <select
+                value={selectedIndicator}
+                onChange={(e) => onIndicatorChange(e.target.value)}
+                className="text-sm px-2 py-1 border rounded-md bg-white text-[#0F3B81]"
+              >
+                {INDICATOR_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={() => setShowChantiers((v) => !v)}
+              className={`px-3 py-1 rounded-md text-sm border transition-colors ${showChantiers ? 'bg-[#00A3FF]/15 text-[#0F3B81] border-[#00A3FF]/40' : 'text-[#64748B] hover:text-[#0F3B81]'}`}
+            >
+              <span className="material-icon align-middle mr-1">construction</span>
+              Chantiers
+            </button>
+
             {selectedArrondissement && (
               <button
                 className="btn-ghost text-xs"
@@ -78,6 +94,7 @@ export default function DashboardLayout({
                 ← Retour vue globale
               </button>
             )}
+
             <LiveStatusBadge
               isLive={liveMetrics?.isLive}
               lastUpdate={liveMetrics?.lastUpdate}
@@ -150,21 +167,21 @@ function computeGlobalAverage(scores) {
 
 function computeGlobalStats(scores) {
   if (!scores?.length) return null;
-  const withLiv = scores.filter((s) => s.livability_score != null);
+  const withConnectivity = scores.filter((s) => s.connectivity_score != null);
   const withPrice = scores.filter((s) => s.median_price != null);
-  if (!withLiv.length) return null;
+  if (!withConnectivity.length) return null;
 
-  const best = withLiv.reduce((a, b) => (a.livability_score > b.livability_score ? a : b));
+  const best = withConnectivity.reduce((a, b) => (a.connectivity_score > b.connectivity_score ? a : b));
   const cheapest = withPrice.length
     ? withPrice.reduce((a, b) => (a.median_price < b.median_price ? a : b))
     : null;
-  const avgLivability = (withLiv.reduce((s, d) => s + d.livability_score, 0) / withLiv.length).toFixed(1);
+  const avgConnectivity = (withConnectivity.reduce((s, d) => s + d.connectivity_score, 0) / withConnectivity.length).toFixed(1);
   const avgPrice = withPrice.length
     ? Math.round(withPrice.reduce((s, d) => s + d.median_price, 0) / withPrice.length)
     : null;
 
   return {
-    avgLivability,
+    avgConnectivity,
     avgPrice,
     bestArr: best.arrondissement,
     cheapestArr: cheapest?.arrondissement,

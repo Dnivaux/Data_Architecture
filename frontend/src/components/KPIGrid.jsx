@@ -20,13 +20,15 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       value: fmtPrice(d.median_price),
       subValue: 'Données DVF (dernière année)',
       score: null,
+      'data-testid': 'kpi-price',
     },
     {
       icon: 'insights',
-      label: 'Vivabilité composite',
+      label: 'Score de vivabilité',
       value: fmtScoreShort(d.livability_score),
       subValue: 'Score global pondéré',
       score: d.livability_score,
+      'data-testid': 'kpi-livability',
     },
     {
       icon: 'directions_bike',
@@ -34,18 +36,18 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       value: fmtScoreShort(d.mobility_score),
       subValue: d.station_count_velib != null
         ? `${fmtInt(d.station_count_velib)} stations Vélib'`
-        : 'Score Vélib\' + PRIM',
+        : "Score Vélib' + PRIM",
       score: d.mobility_score,
       isLive: mobilityLive,
+      'data-testid': 'kpi-mobility',
     },
     {
-      icon: 'wifi',
-      label: 'Connectivité',
-      value: fmtScoreShort(d.connectivity_score),
-      subValue: d.pct_eligible_ftth != null
-        ? `${Math.round(d.pct_eligible_ftth)} % éligibles fibre`
-        : 'Fibre + 4G/5G',
-      score: d.connectivity_score,
+      icon: 'theater_comedy',
+      label: 'Dynamisme du quartier',
+      value: fmtScoreShort(d.anime_score),
+      subValue: 'Commerces, restaurants, bars',
+      score: d.anime_score,
+      'data-testid': 'kpi-dynamism',
     },
     {
       icon: 'eco',
@@ -55,13 +57,15 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
         ? `${fmtInt(d.nb_ilots_fraicheur)} îlots de fraîcheur`
         : 'Végétalisation + îlots',
       score: d.health_env_score,
+      'data-testid': 'kpi-health-env',
     },
     {
-      icon: 'apartment',
-      label: 'Logements sociaux',
-      value: d.nombre_logements_sociaux != null ? fmtInt(d.nombre_logements_sociaux) : '—',
-      subValue: 'Logements agréés (source : Paris Open Data)',
-      score: null,
+      icon: 'shield',
+      label: 'Tranquillité',
+      value: fmtScoreShort(d.tranquility_score),
+      subValue: 'Sécurité, peu de dynamisme nocturne',
+      score: d.tranquility_score,
+      'data-testid': 'kpi-tranquility',
     },
   ];
 

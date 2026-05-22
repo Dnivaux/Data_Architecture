@@ -5,7 +5,7 @@ import { useLiveMetrics } from './hooks/useLiveMetrics';
 
 export default function App() {
   const [selectedArrondissement, setSelectedArrondissement] = useState(null);
-  const [selectedIndicator, setSelectedIndicator] = useState('livability_score');
+  const [selectedIndicator, setSelectedIndicator] = useState('connectivity_score');
 
   const { scores, indicators, scoreMap, indicatorMap, loading, error } = useScores();
   const liveMetrics = useLiveMetrics();
@@ -45,7 +45,7 @@ class AppErrorBoundary extends Component {
       return (
         <div className="h-screen flex flex-col items-center justify-center gap-4">
           <span className="material-icon text-5xl">warning</span>
-          <p className="text-[#F43F5E] font-semibold text-lg">Erreur d'affichage</p>
+          <p className="text-[#0F4C81] font-semibold text-lg">Erreur d'affichage</p>
           <p className="text-[#64748B] text-sm max-w-md text-center">{this.state.message}</p>
           <button
             className="btn-primary mt-2"
@@ -71,7 +71,7 @@ function LoadingScreen() {
           <div
             key={i}
             className="w-2 h-2 rounded-full animate-bounce"
-            style={{ backgroundColor: '#0284C7', animationDelay: `${i * 0.15}s` }}
+            style={{ backgroundColor: '#2EC4B6', animationDelay: `${i * 0.15}s` }}
           />
         ))}
       </div>
@@ -83,12 +83,12 @@ function ErrorScreen({ message }) {
   return (
     <div className="h-screen flex flex-col items-center justify-center gap-4">
       <span className="material-icon text-5xl">warning</span>
-      <p className="text-[#F43F5E] font-semibold text-lg">Impossible de joindre l'API</p>
+      <p className="text-[#0F4C81] font-semibold text-lg">Impossible de joindre l'API</p>
       <p className="text-[#64748B] text-sm max-w-md text-center leading-relaxed">
         {message}
       </p>
       <p className="text-[#64748B] text-xs mt-2">
-        Vérifiez que FastAPI tourne sur <code className="text-[#0284C7]">localhost:8000</code>
+        Vérifiez que FastAPI tourne sur <code className="text-[#0F4C81]">localhost:8000</code>
       </p>
       <button
         className="btn-primary mt-2"

@@ -93,7 +93,7 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
         {pricesError && !pricesLoading ? (
           <div className="h-40 flex flex-col items-center justify-center gap-2">
             <span className="text-[#64748B] text-xs uppercase tracking-wide">Prix médian DVF</span>
-            <span className="text-[#F59E0B] text-xs text-center leading-relaxed">
+            <span className="text-[#2EC4B6] text-xs text-center leading-relaxed">
               Données indisponibles<br />
               <span className="text-[#64748B]">(table Gold non peuplée)</span>
             </span>
@@ -118,10 +118,10 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
 // Bloc connectivité / meilleur opérateur
 // ─────────────────────────────────────────────────────────────────
 const OP_ICONS = {
-  orange: { icon: 'fiber_manual_record', color: '#F59E0B' },
-  sfr: { icon: 'fiber_manual_record', color: '#F43F5E' },
-  bouygues: { icon: 'fiber_manual_record', color: '#0284C7' },
-  free: { icon: 'fiber_manual_record', color: '#7C3AED' },
+  orange: { icon: 'fiber_manual_record', color: '#2EC4B6' },
+  sfr: { icon: 'fiber_manual_record', color: '#0F4C81' },
+  bouygues: { icon: 'fiber_manual_record', color: '#34D399' },
+  free: { icon: 'fiber_manual_record', color: '#1F7A8C' },
 };
 
 function ConnectivityDetail({ data, loading }) {
@@ -146,19 +146,19 @@ function ConnectivityDetail({ data, loading }) {
         {best_4g && (
           <div className="flex-1 bg-[#F4F6F9] border border-[#D0D7DE] rounded-lg p-2 text-center">
             <p className="text-[10px] text-[#64748B] uppercase">Meilleur 4G</p>
-            <p className="text-xs font-semibold text-[#0284C7] mt-0.5">{best_4g}</p>
+            <p className="text-xs font-semibold text-[#0F4C81] mt-0.5">{best_4g}</p>
           </div>
         )}
         {best_5g && (
           <div className="flex-1 bg-[#F4F6F9] border border-[#D0D7DE] rounded-lg p-2 text-center">
             <p className="text-[10px] text-[#64748B] uppercase">Meilleur 5G</p>
-            <p className="text-xs font-semibold text-[#38BDF8] mt-0.5">{best_5g}</p>
+            <p className="text-xs font-semibold text-[#2EC4B6] mt-0.5">{best_5g}</p>
           </div>
         )}
         {ftth_pct != null && (
           <div className="flex-1 bg-[#F4F6F9] border border-[#D0D7DE] rounded-lg p-2 text-center">
             <p className="text-[10px] text-[#64748B] uppercase">Fibre</p>
-            <p className="text-xs font-semibold text-[#22C55E] mt-0.5">{ftth_pct} %</p>
+            <p className="text-xs font-semibold text-[#34D399] mt-0.5">{ftth_pct} %</p>
           </div>
         )}
       </div>
@@ -172,7 +172,7 @@ function ConnectivityDetail({ data, loading }) {
               <span className="flex items-center gap-1.5 text-[#1E293B] w-32">
                 <span
                   className="material-icon"
-                  style={{ color: OP_ICONS[op.operateur]?.color ?? '#0284C7' }}
+                  style={{ color: OP_ICONS[op.operateur]?.color ?? '#0F4C81' }}
                 >
                   {OP_ICONS[op.operateur]?.icon ?? 'signal_cellular_alt'}
                 </span>
@@ -180,10 +180,10 @@ function ConnectivityDetail({ data, loading }) {
               </span>
               <div className="flex gap-2">
                 {op.pct_pop_4g != null && (
-                  <span className="text-[#0284C7]">4G&nbsp;{op.pct_pop_4g}%</span>
+                  <span className="text-[#0F4C81]">4G&nbsp;{op.pct_pop_4g}%</span>
                 )}
                 {op.pct_pop_5g != null && (
-                  <span className="text-[#38BDF8]">5G&nbsp;{op.pct_pop_5g}%</span>
+                  <span className="text-[#2EC4B6]">5G&nbsp;{op.pct_pop_5g}%</span>
                 )}
                 {op.pct_pop_4g == null && op.pct_pop_5g == null && (
                   <span className="text-[#64748B]">—</span>
@@ -203,14 +203,21 @@ function ConnectivityDetail({ data, loading }) {
 
 function MetricsDetail({ data }) {
   const rows = [
-    { label: 'Stations Vélib\'',     value: fmtInt(data.station_count_velib),    icon: 'directions_bike' },
+    { label: "Prix m² médian DVF", value: fmtPrice(data.median_price_dvf_annee_courante), icon: 'home' },
+    { label: "Logements sociaux", value: fmtInt(data.nombre_logements_sociaux), icon: 'apartment' },
+    { label: "Éligibles fibre", value: data.pct_eligible_ftth != null ? `${Math.round(data.pct_eligible_ftth)}%` : '—', icon: 'signal_wifi_4_bar' },
+    { label: "Couv. 4G/5G (débit moy.)", value: data.avg_rate_dl_5g_mbps != null ? `${Math.round(data.avg_rate_dl_5g_mbps)} Mbps` : '—', icon: 'phone_iphone' },
+    { label: "Stations Vélib'", value: fmtInt(data.station_count_velib), icon: 'directions_bike' },
     { label: 'Vélos dispos (moy.)',  value: data.avg_bikes_available != null ? `${data.avg_bikes_available?.toFixed(1)}` : '—', icon: 'sync' },
-    { label: 'Îlots de fraîcheur',  value: fmtInt(data.nb_ilots_fraicheur),     icon: 'park' },
+    { label: "Stations TC", value: fmtInt(data.station_count_prim), icon: 'tram' },
+    { label: "Parcs & jardins", value: fmtInt(data.park_count), icon: 'park' },
+    { label: 'Îlots de fraîcheur',  value: fmtInt(data.nb_ilots_fraicheur),     icon: 'ac_unit' },
     { label: 'Arbres / km²',        value: fmtInt(data.arbres_per_km2),         icon: 'forest' },
-    { label: 'Crimes (total)',       value: fmtInt(data.crime_count_total),      icon: 'lock' },
-    { label: 'Taux / 1 000 hab.',   value: data.crime_rate_per_1000 != null ? `${data.crime_rate_per_1000?.toFixed(1)}` : '—', icon: 'trending_down' },
-    { label: '% fibre éligible',    value: data.pct_eligible_ftth != null ? `${Math.round(data.pct_eligible_ftth)} %` : '—', icon: 'settings_ethernet' },
-    { label: '% couv. 4G',          value: data.pct_pop_4g_mean   != null ? `${Math.round(data.pct_pop_4g_mean)} %` : '—',   icon: 'signal_cellular_alt' },
+    { label: "Restaurants", value: fmtInt(data.restaurant_count), icon: 'restaurant' },
+    { label: "Bars", value: fmtInt(data.bar_count), icon: 'local_bar' },
+    { label: "Commerces", value: fmtInt(data.shop_count), icon: 'storefront' },
+    { label: 'Crimes & délits (total)',       value: fmtInt(data.crime_count_total),      icon: 'lock' },
+    { label: 'Taux criminalité / 1000 hab.',   value: data.crime_rate_per_1000 != null ? `${data.crime_rate_per_1000?.toFixed(1)}` : '—', icon: 'trending_down' },
   ].filter((r) => r.value !== '—' && r.value !== 'undefined' && r.value != null);
 
   if (rows.length === 0) return null;
@@ -228,6 +235,18 @@ function MetricsDetail({ data }) {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function Metric({ icon, label, value }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="material-icon text-base">{icon}</span>
+      <div>
+        <p className="text-xs text-[#64748B] leading-tight">{label}</p>
+        <p className="text-sm font-medium text-[#1E293B]">{value}</p>
       </div>
     </div>
   );

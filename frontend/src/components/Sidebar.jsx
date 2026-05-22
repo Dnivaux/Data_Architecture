@@ -1,7 +1,6 @@
 import LiveStatusBadge from './LiveStatusBadge';
 
 export const INDICATOR_OPTIONS = [
-  { id: 'livability_score',   label: 'Vivabilité composite', icon: 'assistant_navigation' },
   { id: 'connectivity_score', label: 'Connectivité',          icon: 'wifi' },
   { id: 'mobility_score',     label: 'Mobilité',              icon: 'directions_bike' },
   { id: 'health_env_score',   label: 'Santé Environnementale',icon: 'eco', desc: 'Végétalisation, air pur, îlots de fraîcheur' },
@@ -33,7 +32,7 @@ export default function Sidebar({
             Urban Data Explorer
           </span>
         </div>
-        <p className="text-xs text-[#64748B] pl-7">Paris · Architecture Medallion</p>
+        <p className="text-xs text-[#64748B] pl-7">Paris</p>
       </div>
 
       <hr className="border-[#D0D7DE]" />
@@ -50,7 +49,7 @@ export default function Sidebar({
               onClick={() => onIndicatorChange(opt.id)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left w-full
                 ${selectedIndicator === opt.id
-                  ? 'bg-[#38BDF8]/20 text-[#0284C7] font-medium border border-[#38BDF8]/40'
+                  ? 'bg-[#2EC4B6]/20 text-[#0F4C81] font-medium border border-[#2EC4B6]/40'
                   : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#E2E8F0]'
                 }`}
             >
@@ -89,14 +88,14 @@ export default function Sidebar({
           onClick={onToggleChantiers}
           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-colors
             ${showChantiers
-              ? 'bg-[#F59E0B]/20 text-[#B45309] font-medium border border-[#F59E0B]/40'
+              ? 'bg-[#2EC4B6]/20 text-[#0F4C81] font-medium border border-[#2EC4B6]/40'
               : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#E2E8F0]'
             }`}
         >
           <span className="material-icon text-[18px]">construction</span>
           <span className="leading-tight">Chantiers</span>
           {showChantiers && (
-            <span className="ml-auto text-[10px] bg-[#F59E0B]/20 text-[#B45309] px-1.5 py-0.5 rounded-full">
+            <span className="ml-auto text-[10px] bg-[#2EC4B6]/20 text-[#0F4C81] px-1.5 py-0.5 rounded-full">
               LIVE
             </span>
           )}

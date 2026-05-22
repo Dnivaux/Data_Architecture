@@ -59,11 +59,11 @@
 
   .btn-primary {
     @apply text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors;
-    background-color: #0284C7;
+    background-color: #0F4C81;
   }
 
   .btn-primary:hover {
-    background-color: #38BDF8;
+    background-color: #2EC4B6;
   }
 
   .btn-ghost {
@@ -86,7 +86,7 @@
     background-color: #F4F6F9;
     border: 1px solid #D0D7DE;
     color: #1E293B;
-    --tw-ring-color: #38BDF8;
+    --tw-ring-color: #2EC4B6;
   }
 }
 
@@ -129,5 +129,5 @@
 }
 
 .leaflet-control-attribution a {
-  color: #0284C7 !important;
+  color: #0F4C81 !important;
 }
