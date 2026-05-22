@@ -110,6 +110,7 @@ export default function DashboardLayout({
           <KPIGrid
             data={selectedScore}
             liveData={liveMetrics}
+            onIndicatorClick={onIndicatorChange}
           />
 
           {/* Carte + Analytics */}

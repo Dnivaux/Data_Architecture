@@ -15,6 +15,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
 
   const kpis = [
     {
+      id: 'median_price',
       icon: 'home',
       label: 'Prix médian',
       value: fmtPrice(d.median_price),
@@ -23,6 +24,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       'data-testid': 'kpi-price',
     },
     {
+      id: 'livability_score',
       icon: 'insights',
       label: 'Score de vivabilité',
       value: fmtScoreShort(d.livability_score),
@@ -31,6 +33,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       'data-testid': 'kpi-livability',
     },
     {
+      id: 'mobility_score',
       icon: 'directions_bike',
       label: 'Mobilité',
       value: fmtScoreShort(d.mobility_score),
@@ -42,6 +45,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       'data-testid': 'kpi-mobility',
     },
     {
+      id: 'anime_score',
       icon: 'theater_comedy',
       label: 'Dynamisme du quartier',
       value: fmtScoreShort(d.anime_score),
@@ -50,6 +54,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       'data-testid': 'kpi-dynamism',
     },
     {
+      id: 'health_env_score',
       icon: 'eco',
       label: 'Santé Environnementale',
       value: fmtScoreShort(d.health_env_score),
@@ -60,6 +65,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       'data-testid': 'kpi-health-env',
     },
     {
+      id: 'tranquility_score',
       icon: 'shield',
       label: 'Tranquillité',
       value: fmtScoreShort(d.tranquility_score),
@@ -75,7 +81,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
         <KPICard
           key={kpi.label}
           {...kpi}
-          onClick={onIndicatorClick ? () => onIndicatorClick(kpi.label) : undefined}
+          onClick={onIndicatorClick ? () => onIndicatorClick(kpi.id) : undefined}
         />
       ))}
     </div>

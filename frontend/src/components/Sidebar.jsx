@@ -1,11 +1,12 @@
 import LiveStatusBadge from './LiveStatusBadge';
 
 export const INDICATOR_OPTIONS = [
+  { id: 'livability_score',   label: 'Score de vivabilité',    icon: 'insights' },
   { id: 'connectivity_score', label: 'Connectivité',          icon: 'wifi' },
   { id: 'mobility_score',     label: 'Mobilité',              icon: 'directions_bike' },
   { id: 'health_env_score',   label: 'Santé Environnementale',icon: 'eco', desc: 'Végétalisation, air pur, îlots de fraîcheur' },
   { id: 'tranquility_score',  label: 'Tranquillité',          icon: 'shield', desc: 'Sécurité, peu de dynamisme nocturne' },
-  { id: 'anime_score',        label: 'Animation',             icon: 'theater_comedy' },
+  { id: 'anime_score',        label: 'Dynamisme du quartier', icon: 'theater_comedy' },
   { id: 'calme_score',        label: 'Calme',                 icon: 'volume_off', desc: 'Absence de bruit (Lden)' },
   { id: 'median_price',       label: 'Prix m² médian',        icon: 'payments' },
 ];
