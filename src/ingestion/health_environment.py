@@ -64,7 +64,11 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import urllib3
 import pandas as pd
+
+# Désactive les avertissements SSL (certificat intermédiaire manquant sur data.gouv.fr)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from .base import build_session, get_logger, save_parquet
 
@@ -262,14 +266,19 @@ def _fetch_airparif_stations(
         except Exception as exc:
             logger.warning("Hub GeoJSON échoué : %s", exc)
 
-    # --- Tentative 3 : data.gouv.fr ---
+    # --- Tentative 3 : data.gouv.fr (verify=False — SSL intermédiaire manquant) ---
     if not records:
         logger.warning("Airparif indisponible via ArcGIS — recherche data.gouv.fr")
         try:
             resp = session.get(
                 DATAGOUV_API,
-                params={"q": "airparif stations mesure qualite air Paris", "page_size": 5},
+                params={
+                    "q":            "stations de mesure qualité de l'air",
+                    "organization": "airparif",
+                    "page_size":    10,
+                },
                 timeout=15,
+                verify=False,
             )
             if resp.status_code == 200:
                 for ds in resp.json().get("data", []):
@@ -277,7 +286,7 @@ def _fetch_airparif_stations(
                         fmt = res.get("format", "").lower()
                         if fmt in ("geojson", "json", "csv"):
                             try:
-                                r2 = session.get(res["url"], timeout=30)
+                                r2 = session.get(res["url"], timeout=30, verify=False)
                                 if r2.status_code == 200:
                                     data = r2.json()
                                     if isinstance(data, dict) and "features" in data:
@@ -298,7 +307,10 @@ def _fetch_airparif_stations(
             logger.warning("Recherche data.gouv.fr Airparif échouée : %s", exc)
 
     if not records:
-        logger.warning("Airparif stations : aucune donnée récupérée depuis aucune source")
+        logger.warning(
+            "Airparif stations : aucune donnée récupérée (ArcGIS + GeoJSON + data.gouv.fr) "
+            "— pipeline poursuivi sans données air"
+        )
         return pd.DataFrame(columns=COLS_STATIONS)
 
     rows = []

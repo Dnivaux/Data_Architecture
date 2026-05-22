@@ -44,7 +44,12 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import urllib3
 import pandas as pd
+
+# Désactive temporairement les avertissements SSL sur data.gouv.fr
+# (certificat intermédiaire manquant côté serveur — contournement en attendant le fix upstream)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from .base import BRONZE_ROOT, build_session, get_logger, read_parquet, save_parquet
 
@@ -215,7 +220,7 @@ def _discover_bruitparif_url(session: Any, logger: Any) -> list[str]:
     # --- Tentative 1 : slugs connus ---
     for slug in CBS_SLUGS:
         try:
-            resp = session.get(f"{DATAGOUV_API}{slug}/", timeout=15)
+            resp = session.get(f"{DATAGOUV_API}{slug}/", timeout=15, verify=False)
             if resp.status_code == 200:
                 for res in resp.json().get("resources", []):
                     if res.get("format", "").lower() in FORMATS_OK:
@@ -233,6 +238,7 @@ def _discover_bruitparif_url(session: Any, logger: Any) -> list[str]:
                 DATAGOUV_API,
                 params={"q": kw, "page_size": 10, "sort": "-created"},
                 timeout=15,
+                verify=False,
             )
             if resp.status_code == 200:
                 for ds in resp.json().get("data", []):
@@ -380,7 +386,7 @@ def _fetch_bruitparif(session: Any, logger: Any, ingested_at: datetime) -> pd.Da
     for url in all_urls:
         logger.info("Bruitparif → essai : %s", url)
         try:
-            resp = session.get(url)
+            resp = session.get(url, verify=False)
             if resp.status_code != 200:
                 logger.warning("HTTP %d", resp.status_code)
                 continue

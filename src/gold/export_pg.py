@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
@@ -207,8 +208,13 @@ def _clean_df_for_pg(df: pd.DataFrame, table_name: str, logger: Any) -> pd.DataF
     for col in df.select_dtypes(include=["datetimetz", "datetime64[ns, UTC]"]).columns:
         df[col] = df[col].astype(str)
 
-    # Remplacer NaN/NaT par None
+    # Remplacer NaN/NA/NaT par None (NULL PostgreSQL)
+    # astype(object) brise les dtypes pandas spéciaux (Int64, float64…)
+    # pour que where() et replace() opèrent sur des valeurs Python natives,
+    # évitant psycopg2.errors.NumericValueOutOfRange sur les colonnes INTEGER.
+    df = df.astype(object)
     df = df.where(pd.notnull(df), None)
+    df = df.replace({np.nan: None, pd.NA: None})
 
     # Supprimer colonnes non attendues par le DDL (évite les erreurs d'insertion)
     ddl = _DDL_MAP.get(table_name, "")
