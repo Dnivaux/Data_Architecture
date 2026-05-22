@@ -374,16 +374,91 @@ def build_mobility_silver(
                     "avg_bikes_pct", "electric_bike_ratio"]:
             base[col] = pd.NA
 
-    # --- PRIM (cas 1 via stop_ref, pas de coords dans le schéma Bronze) ---
-    df_prim = read_parquet("prim")
-    if not df_prim.empty and "stop_ref" in df_prim.columns:
-        # Le schéma Bronze PRIM n'a pas de lat/lon : on compte simplement les arrêts uniques
-        prim_count = df_prim.groupby("stop_ref").size().reset_index(name="passages")
-        base["prim_stop_count"] = len(prim_count)  # agrégation globale (à affiner Silver v2)
-        log.info("PRIM : %d arrêts distincts trouvés", len(prim_count))
+    # --- ICAR Référentiel (cas 2 : sjoin lat/lon) ---
+    df_icar = read_parquet("icar")
+    _transit_cols = ["transit_stop_count", "metro_count", "rer_count", "tram_count", "bus_count"]
+    if not df_icar.empty and {"latitude", "longitude", "transport_mode"}.issubset(df_icar.columns):
+        # Conserver uniquement le batch le plus récent (référentiel quasi-statique)
+        if "batch_ts" in df_icar.columns:
+            latest_batch = df_icar["batch_ts"].max()
+            df_icar = df_icar[df_icar["batch_ts"] == latest_batch].copy()
+            log.info("ICAR : batch le plus récent sélectionné (%s)", latest_batch)
+
+        # Filtrer les coordonnées nulles
+        df_icar = df_icar.dropna(subset=["latitude", "longitude"]).reset_index(drop=True)
+
+        if not df_icar.empty:
+            # Jointure spatiale → colonne 'arrondissement'
+            df_icar = _sjoin_to_arrondissement(
+                df_icar, "latitude", "longitude", boundaries_gdf, log
+            )
+            df_icar = df_icar.dropna(subset=["arrondissement"])
+            df_icar["arrondissement"] = df_icar["arrondissement"].astype(int)
+
+            # Comptage total par arrondissement
+            transit_total = (
+                df_icar.groupby("arrondissement")
+                .size()
+                .reset_index(name="transit_stop_count")
+            )
+
+            # Comptage par mode via pivot (unstack garantit une colonne par mode)
+            mode_pivot = (
+                df_icar.groupby(["arrondissement", "transport_mode"])
+                .size()
+                .unstack(fill_value=0)
+                .reset_index()
+            )
+            # Garantir les 4 colonnes attendues même si un mode est absent des données
+            for mode in ["metro", "rer", "tram", "bus"]:
+                if mode not in mode_pivot.columns:
+                    mode_pivot[mode] = 0
+            mode_pivot = mode_pivot.rename(columns={
+                "metro": "metro_count",
+                "rer":   "rer_count",
+                "tram":  "tram_count",
+                "bus":   "bus_count",
+            })
+            # Garder uniquement les colonnes utiles (ignorer "unknown", "multimodal", etc.)
+            mode_pivot = mode_pivot[
+                ["arrondissement"] +
+                [c for c in ["metro_count", "rer_count", "tram_count", "bus_count"]
+                 if c in mode_pivot.columns]
+            ]
+
+            # Fusion total + détail
+            icar_agg = transit_total.merge(mode_pivot, on="arrondissement", how="left")
+
+            # Typage entier sur icar_agg avant merge
+            for col in _transit_cols:
+                if col in icar_agg.columns:
+                    icar_agg[col] = icar_agg[col].fillna(0).astype(int)
+
+            base = base.merge(icar_agg, on="arrondissement", how="left")
+
+            # Remplir les arrondissements sans aucun arrêt ICAR (NaN issus du left merge)
+            for col in _transit_cols:
+                if col in base.columns:
+                    base[col] = base[col].fillna(0).astype("Int64")
+
+            log.info(
+                "ICAR : %d arrêts répartis dans %d arrondissements "
+                "(metro=%d, rer=%d, tram=%d, bus=%d)",
+                len(df_icar),
+                icar_agg["arrondissement"].nunique(),
+                int(icar_agg.get("metro_count", pd.Series([0])).sum()),
+                int(icar_agg.get("rer_count",   pd.Series([0])).sum()),
+                int(icar_agg.get("tram_count",  pd.Series([0])).sum()),
+                int(icar_agg.get("bus_count",   pd.Series([0])).sum()),
+            )
+        else:
+            log.warning("ICAR : aucun arrêt avec coordonnées valides après filtrage")
+            for col in _transit_cols:
+                base[col] = pd.NA
     else:
-        log.warning("Bronze prim vide — prim_stop_count à NA")
-        base["prim_stop_count"] = pd.NA
+        log.warning("Bronze icar vide ou colonnes manquantes — transit à NA")
+        for col in _transit_cols:
+            base[col] = pd.NA
 
     base["computed_at"] = computed_at
     return base.sort_values("arrondissement").reset_index(drop=True)

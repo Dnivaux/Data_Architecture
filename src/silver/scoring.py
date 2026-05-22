@@ -11,7 +11,7 @@ Scores historiques (révisés pour éviter la duplication) :
 
 Nouveaux scores stratégiques :
   - score_connectivity   : fibre + 4G/5G + ratio T2-T3
-  - score_mobility       : disponibilité Vélib' + densité PRIM
+  - score_mobility       : transports en commun ICAR (50%) + Vélib' (50%)
   - score_health_env     : végétalisation (30%) + arbres (30%) + îlots (20%) + air_quality (20%)
   - score_tranquility    : inverse (crime 40% + bruit 35% + bars/clubs 25%)
 
@@ -218,9 +218,12 @@ class ArrondissementScorer:
 
     def score_mobility(self) -> pd.DataFrame:
         """
-        Score Mobilité 0-100.
-        Composantes : avg_bikes_available (40%), station_count_velib (30%),
-                      avg_bikes_pct (30%).
+        Score Mobilité 0-100 — v2 (ICAR + Vélib').
+        Composantes :
+          Transports en commun ICAR (50%) :
+            transit_capacity_raw = metro*3 + rer*3 + tram*2 + bus*1 → normalisé
+          Mobilités douces Vélib' (50%) :
+            avg_bikes_available (20%) + station_count_velib (15%) + avg_docks_available (15%)
         """
         df = _read_silver("mobility_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -230,16 +233,45 @@ class ArrondissementScorer:
             return base
 
         base = base.merge(df, on="arrondissement", how="left")
-        s_bikes   = _normalize(base.get("avg_bikes_available", pd.Series([0.0]*20)))
-        s_stations = _normalize(base.get("station_count_velib", pd.Series([0.0]*20)))
-        # Taux d'occupation inverse : moins saturé = meilleur accès aux bornes
-        s_docks   = _normalize(base.get("avg_docks_available", pd.Series([0.0]*20)))
+
+        # --- Vélib' ---
+        s_bikes    = _normalize(base.get("avg_bikes_available",  pd.Series([0.0] * 20)))
+        s_stations = _normalize(base.get("station_count_velib",  pd.Series([0.0] * 20)))
+        # Bornes libres : moins saturé = meilleur accès
+        s_docks    = _normalize(base.get("avg_docks_available",  pd.Series([0.0] * 20)))
+
+        # --- Transports en commun ICAR ---
+        _icar_cols = ["metro_count", "rer_count", "tram_count", "bus_count"]
+        if all(c in base.columns for c in _icar_cols):
+            metro = pd.to_numeric(base["metro_count"], errors="coerce").fillna(0)
+            rer   = pd.to_numeric(base["rer_count"],   errors="coerce").fillna(0)
+            tram  = pd.to_numeric(base["tram_count"],  errors="coerce").fillna(0)
+            bus   = pd.to_numeric(base["bus_count"],   errors="coerce").fillna(0)
+            # Capacité pondérée : metro/RER (×3) > tram (×2) > bus (×1)
+            transit_capacity_raw = metro * 3 + rer * 3 + tram * 2 + bus
+            s_transit = _normalize(transit_capacity_raw)
+            self.logger.info(
+                "Score mobilité ICAR : capacité transit min=%.0f max=%.0f",
+                transit_capacity_raw.min(), transit_capacity_raw.max(),
+            )
+        else:
+            self.logger.warning("Colonnes ICAR absentes du Silver mobility — s_transit par défaut 50")
+            s_transit = pd.Series([50.0] * len(base))
 
         base["mobility_score"] = (
-            0.40 * s_bikes + 0.30 * s_stations + 0.30 * s_docks
+            0.50 * s_transit
+            + 0.20 * s_bikes
+            + 0.15 * s_stations
+            + 0.15 * s_docks
         ).round(1)
-        return base[["arrondissement", "station_count_velib",
-                     "avg_bikes_available", "avg_docks_available", "mobility_score"]]
+
+        result_cols = [
+            "arrondissement",
+            "station_count_velib", "avg_bikes_available", "avg_docks_available",
+            "transit_stop_count", "metro_count", "rer_count", "tram_count", "bus_count",
+            "mobility_score",
+        ]
+        return base[[c for c in result_cols if c in base.columns]]
 
     def score_health_env(self) -> pd.DataFrame:
         """
