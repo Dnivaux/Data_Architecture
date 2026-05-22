@@ -1,11 +1,5 @@
 """
-Full Data Pipeline Orchestrator
-==================================
-Architecture Lakehouse Medallion complète :
-  Bronze  → Ingestion brute multi-sources (statique + micro-batch mobilité)
-  Silver  → Jointures spatiales, nettoyage, scores normalisés 0-100
-  Gold    → Tables analytiques par arrondissement + géométries
-  PG      → Export upsert vers PostgreSQL (critique pour évaluation)
+
 
 Flags principaux
 ----------------

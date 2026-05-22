@@ -207,6 +207,28 @@ def build_arrondissement_summary(logger: logging.Logger) -> pd.DataFrame:
                     on="arrondissement", how="left",
                 )
 
+    # Logements sociaux (Bronze direct — total cumulé toutes années)
+    # Chaque ligne = programme/immeuble agréé cette année → somme = stock total
+    df_sh = read_parquet("social_housing")
+    if (
+        not df_sh.empty
+        and "arrondissement" in df_sh.columns
+        and "nombre_logements" in df_sh.columns
+        and "nombre_logements_sociaux" not in base.columns
+    ):
+        sh_agg = (
+            df_sh.groupby("arrondissement")["nombre_logements"]
+            .sum()
+            .reset_index()
+            .rename(columns={"nombre_logements": "nombre_logements_sociaux"})
+        )
+        base = base.merge(sh_agg, on="arrondissement", how="left")
+        base["nombre_logements_sociaux"] = (
+            pd.to_numeric(base["nombre_logements_sociaux"], errors="coerce")
+            .astype("Int64")
+        )
+        logger.info("Logements sociaux : %d arrondissements", sh_agg["arrondissement"].nunique())
+
     # Score composite de vivabilité globale
     base["livability_score"] = _compute_livability(base)
 

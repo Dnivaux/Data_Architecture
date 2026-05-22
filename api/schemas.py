@@ -33,8 +33,9 @@ class ArrondissementScore(BaseModel):
     bar_count:           int            = Field(0, description="Nombre de bars (OSM)")
     nightclub_count:     int            = Field(0, description="Nombre de boîtes de nuit (OSM)")
     park_count:          int            = Field(0, description="Nombre de parcs (OSM)")
-    median_price:        Optional[float] = Field(None, description="Prix médian DVF (€/m²)")
-    social_housing_pct:  Optional[float] = Field(None, description="% logements sociaux")
+    median_price:            Optional[float] = Field(None, description="Prix médian DVF (€/m²)")
+    social_housing_pct:      Optional[float] = Field(None, description="% logements sociaux (déprécié)")
+    nombre_logements_sociaux: Optional[int]  = Field(None, description="Nb logements sociaux (stock total)")
 
 
 class ArrondissementDetail(BaseModel):
@@ -80,6 +81,9 @@ class ArrondissementDetail(BaseModel):
 
     # Prix
     median_price:        Optional[float] = Field(None, description="Prix médian DVF (€)")
+
+    # Logement social
+    nombre_logements_sociaux: Optional[int] = Field(None, description="Nb logements sociaux (dernière année)")
 
 
 # ---------------------------------------------------------------------------

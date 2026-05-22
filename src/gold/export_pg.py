@@ -19,12 +19,6 @@ Tables exportées
   gold_indicator_scores         — vue allégée scores 0-100 (PK : arrondissement)
   gold_poi_catalog              — POI OSM (PK : id)
   gold_price_timeline           — série temporelle prix (PK : arrondissement, year)
-
-Usage CLI
----------
-  python -m src.gold.export_pg                    # exporte toutes les tables
-  python -m src.gold.export_pg --tables summary   # table maîtresse uniquement
-  python -m src.gold.export_pg --dry-run          # vérifie la connexion sans écrire
 """
 from __future__ import annotations
 

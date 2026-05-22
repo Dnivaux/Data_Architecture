@@ -59,8 +59,8 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
     {
       icon: 'apartment',
       label: 'Logements sociaux',
-      value: fmtPct(d.social_housing_pct),
-      subValue: `${fmtInt(d.bar_count)} bars · ${fmtInt(d.park_count)} parcs`,
+      value: d.nombre_logements_sociaux != null ? fmtInt(d.nombre_logements_sociaux) : '—',
+      subValue: 'Logements agréés (source : Paris Open Data)',
       score: null,
     },
   ];

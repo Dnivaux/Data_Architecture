@@ -54,13 +54,29 @@ export function priceToChoroplethColor(price, min, max, alpha = 0.75) {
   return scoreToChoroplethColor(100 * (1 - t), alpha);
 }
 
+/**
+ * Indicateurs dont la valeur brute doit être normalisée min-max
+ * (pas des scores 0-100, mais des quantités absolues).
+ * Plus = meilleur (vert) sauf median_price (plus = rouge).
+ */
+const _MINMAX_HIGHER_BETTER = new Set(['nombre_logements_sociaux']);
+const _MINMAX_LOWER_BETTER  = new Set(['median_price']);
+
 /** Couleur par indicateur + valeur (dispatch automatique) */
 export function indicatorColor(indicatorId, value, allValues = [], alpha = 0.75) {
-  if (indicatorId === 'median_price') {
-    const nums = allValues.filter(Boolean);
+  if (_MINMAX_LOWER_BETTER.has(indicatorId)) {
+    const nums = allValues.filter((v) => v != null);
     const min = Math.min(...nums);
     const max = Math.max(...nums);
     return priceToChoroplethColor(value, min, max, alpha);
+  }
+  if (_MINMAX_HIGHER_BETTER.has(indicatorId)) {
+    const nums = allValues.filter((v) => v != null);
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    if (min === max || value == null) return `rgba(71, 85, 105, ${alpha})`;
+    const t = Math.max(0, Math.min(1, (value - min) / (max - min)));
+    return scoreToChoroplethColor(t * 100, alpha);
   }
   return scoreToChoroplethColor(value, alpha);
 }

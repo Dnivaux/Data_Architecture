@@ -125,21 +125,27 @@ export default function DashboardLayout({
   );
 }
 
-/** Calcule la moyenne Paris pour les KPI Cards quand aucun arrdt sélectionné */
+/** Calcule la moyenne Paris pour les KPI Cards quand aucun arrdt sélectionné.
+ *  Pour les comptages (nombre_logements_sociaux), on fait la somme totale Paris. */
 function computeGlobalAverage(scores) {
   if (!scores?.length) return null;
-  const keys = [
+  const avgKeys = [
     'anime_score', 'calme_score', 'accessibilite_score',
     'connectivity_score', 'mobility_score', 'health_env_score',
     'tranquility_score', 'livability_score', 'median_price',
     'social_housing_pct', 'bar_count', 'nightclub_count', 'park_count',
   ];
-  const avg = {};
-  keys.forEach((k) => {
+  const sumKeys = ['nombre_logements_sociaux'];  // totaux Paris, pas une moyenne
+  const result = {};
+  avgKeys.forEach((k) => {
     const vals = scores.map((s) => s[k]).filter((v) => v != null);
-    avg[k] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    result[k] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
   });
-  return avg;
+  sumKeys.forEach((k) => {
+    const vals = scores.map((s) => s[k]).filter((v) => v != null);
+    result[k] = vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+  });
+  return result;
 }
 
 function computeGlobalStats(scores) {
