@@ -5,30 +5,27 @@
 
 /** Score 0-100 → couleur hex sur l'échelle rouge-ambre-vert */
 export function scoreToHex(score) {
-  if (score == null) return '#475569'; // slate-600 : donnée manquante
+  if (score == null) return '#D0D7DE'; // neutre : donnée manquante
   const s = Math.max(0, Math.min(100, score));
-  if (s >= 70) return '#10B981'; // emerald-500
-  if (s >= 50) return '#F59E0B'; // amber-500
-  if (s >= 30) return '#F97316'; // orange-500
-  return '#EF4444';              // red-500
+  if (s >= 70) return '#22C55E'; // green
+  if (s >= 50) return '#F59E0B'; // amber
+  return '#F43F5E';              // coral
 }
 
 /** Score 0-100 → classe Tailwind text- */
 export function scoreToTextClass(score) {
-  if (score == null) return 'text-slate-500';
-  if (score >= 70) return 'text-emerald-400';
-  if (score >= 50) return 'text-amber-400';
-  if (score >= 30) return 'text-orange-400';
-  return 'text-red-400';
+  if (score == null) return 'text-[#64748B]';
+  if (score >= 70) return 'text-[#22C55E]';
+  if (score >= 50) return 'text-[#F59E0B]';
+  return 'text-[#F43F5E]';
 }
 
 /** Score 0-100 → classe Tailwind bg- (barre de progression) */
 export function scoreToBgClass(score) {
-  if (score == null) return 'bg-slate-600';
-  if (score >= 70) return 'bg-emerald-500';
-  if (score >= 50) return 'bg-amber-500';
-  if (score >= 30) return 'bg-orange-500';
-  return 'bg-red-500';
+  if (score == null) return 'bg-[#D0D7DE]';
+  if (score >= 70) return 'bg-[#22C55E]';
+  if (score >= 50) return 'bg-[#F59E0B]';
+  return 'bg-[#F43F5E]';
 }
 
 /**
@@ -36,13 +33,13 @@ export function scoreToBgClass(score) {
  * Retourne une couleur rgba exploitable par Leaflet.
  */
 export function scoreToChoroplethColor(score, alpha = 0.75) {
-  if (score == null) return `rgba(71, 85, 105, ${alpha})`;
+  if (score == null) return `rgba(208, 215, 222, ${alpha})`;
   const s = Math.max(0, Math.min(100, score));
   const t = s / 100;
   // Rouge pur (s=0) → Vert pur (s=100)
-  const r = Math.round(239 * (1 - t) + 16 * t);
-  const g = Math.round(68  * (1 - t) + 185 * t);
-  const b = Math.round(68  * (1 - t) + 129 * t);
+  const r = Math.round(244 * (1 - t) + 34 * t);
+  const g = Math.round(63  * (1 - t) + 197 * t);
+  const b = Math.round(94  * (1 - t) + 94 * t);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
@@ -51,7 +48,7 @@ export function scoreToChoroplethColor(score, alpha = 0.75) {
  * Nécessite min/max du dataset pour normaliser.
  */
 export function priceToChoroplethColor(price, min, max, alpha = 0.75) {
-  if (price == null || min === max) return `rgba(71, 85, 105, ${alpha})`;
+  if (price == null || min === max) return `rgba(208, 215, 222, ${alpha})`;
   // Prix élevé = rouge, prix bas = vert
   const t = Math.max(0, Math.min(1, (price - min) / (max - min)));
   return scoreToChoroplethColor(100 * (1 - t), alpha);

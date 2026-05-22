@@ -58,14 +58,14 @@ export default function DashboardLayout({
       <div className="flex flex-col flex-1 overflow-hidden">
 
         {/* Header */}
-        <header className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-slate-800/40">
+        <header className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-[#D0D7DE] bg-[#F4F6F9]">
           <div>
-            <h1 className="text-base font-bold text-slate-100">
+            <h1 className="text-base font-bold text-[#1E293B]">
               {selectedArrondissement
                 ? `Paris ${selectedArrondissement}e arrondissement`
                 : 'Paris — Vue globale'}
             </h1>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[#64748B]">
               Données Medallion · Gold Layer · PostgreSQL
             </p>
           </div>

@@ -1,14 +1,14 @@
 import LiveStatusBadge from './LiveStatusBadge';
 
 export const INDICATOR_OPTIONS = [
-  { id: 'livability_score',   label: 'Vivabilité composite', icon: '🏙️' },
-  { id: 'connectivity_score', label: 'Connectivité',          icon: '📡' },
-  { id: 'mobility_score',     label: 'Mobilité',              icon: '🚲' },
-  { id: 'health_env_score',   label: 'Santé Environnementale',icon: '🌿', desc: 'Végétalisation, air pur, îlots de fraîcheur' },
-  { id: 'tranquility_score',  label: 'Tranquillité',          icon: '🔕', desc: 'Sécurité, peu de dynamisme nocturne' },
-  { id: 'anime_score',        label: 'Animation',             icon: '🎭' },
-  { id: 'calme_score',        label: 'Calme',                 icon: '😌', desc: 'Absence de bruit (Lden)' },
-  { id: 'median_price',       label: 'Prix m² médian',        icon: '💶' },
+  { id: 'livability_score',   label: 'Vivabilité composite', icon: 'assistant_navigation' },
+  { id: 'connectivity_score', label: 'Connectivité',          icon: 'wifi' },
+  { id: 'mobility_score',     label: 'Mobilité',              icon: 'directions_bike' },
+  { id: 'health_env_score',   label: 'Santé Environnementale',icon: 'eco', desc: 'Végétalisation, air pur, îlots de fraîcheur' },
+  { id: 'tranquility_score',  label: 'Tranquillité',          icon: 'shield', desc: 'Sécurité, peu de dynamisme nocturne' },
+  { id: 'anime_score',        label: 'Animation',             icon: 'theater_comedy' },
+  { id: 'calme_score',        label: 'Calme',                 icon: 'volume_off', desc: 'Absence de bruit (Lden)' },
+  { id: 'median_price',       label: 'Prix m² médian',        icon: 'payments' },
 ];
 
 /**
@@ -23,24 +23,24 @@ export default function Sidebar({
   onToggleChantiers,
 }) {
   return (
-    <aside className="w-64 shrink-0 flex flex-col gap-5 bg-slate-800/60 border-r border-slate-700 px-4 py-5 overflow-y-auto">
+    <aside className="w-64 shrink-0 flex flex-col gap-5 bg-[#EAEFF5] border-r border-[#D0D7DE] px-4 py-5 overflow-y-auto">
 
       {/* Logo / titre */}
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-xl">🏙️</span>
-          <span className="font-bold text-slate-100 text-sm tracking-tight">
+          <span className="material-icon text-xl">location_city</span>
+          <span className="font-bold text-[#1E293B] text-sm tracking-tight">
             Urban Data Explorer
           </span>
         </div>
-        <p className="text-xs text-slate-500 pl-7">Paris · Architecture Medallion</p>
+        <p className="text-xs text-[#64748B] pl-7">Paris · Architecture Medallion</p>
       </div>
 
-      <hr className="border-slate-700" />
+      <hr className="border-[#D0D7DE]" />
 
       {/* Indicateur thématique */}
       <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
+        <p className="text-xs font-semibold text-[#64748B] uppercase tracking-widest mb-2">
           Indicateur affiché
         </p>
         <nav className="flex flex-col gap-1">
@@ -50,23 +50,23 @@ export default function Sidebar({
               onClick={() => onIndicatorChange(opt.id)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left w-full
                 ${selectedIndicator === opt.id
-                  ? 'bg-indigo-600/30 text-indigo-300 font-medium border border-indigo-500/30'
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-700/50'
+                  ? 'bg-[#38BDF8]/20 text-[#0284C7] font-medium border border-[#38BDF8]/40'
+                  : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#E2E8F0]'
                 }`}
             >
-              <span>{opt.icon}</span>
+              <span className="material-icon text-[18px]">{opt.icon}</span>
               <span className="leading-tight">{opt.label}</span>
             </button>
           ))}
         </nav>
       </div>
 
-      <hr className="border-slate-700" />
+      <hr className="border-[#D0D7DE]" />
 
       {/* Statistiques globales Paris */}
       {globalStats && (
         <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
+          <p className="text-xs font-semibold text-[#64748B] uppercase tracking-widest mb-2">
             Statistiques Paris
           </p>
           <div className="flex flex-col gap-2">
@@ -78,25 +78,25 @@ export default function Sidebar({
         </div>
       )}
 
-      <hr className="border-slate-700" />
+      <hr className="border-[#D0D7DE]" />
 
       {/* Couches cartographiques */}
       <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
+        <p className="text-xs font-semibold text-[#64748B] uppercase tracking-widest mb-2">
           Couches
         </p>
         <button
           onClick={onToggleChantiers}
           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-colors
             ${showChantiers
-              ? 'bg-orange-600/30 text-orange-300 font-medium border border-orange-500/30'
-              : 'text-slate-400 hover:text-slate-100 hover:bg-slate-700/50'
+              ? 'bg-[#F59E0B]/20 text-[#B45309] font-medium border border-[#F59E0B]/40'
+              : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#E2E8F0]'
             }`}
         >
-          <span>🚧</span>
+          <span className="material-icon text-[18px]">construction</span>
           <span className="leading-tight">Chantiers</span>
           {showChantiers && (
-            <span className="ml-auto text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded-full">
+            <span className="ml-auto text-[10px] bg-[#F59E0B]/20 text-[#B45309] px-1.5 py-0.5 rounded-full">
               LIVE
             </span>
           )}
@@ -104,10 +104,10 @@ export default function Sidebar({
       </div>
 
       <div className="mt-auto">
-        <hr className="border-slate-700 mb-4" />
+        <hr className="border-[#D0D7DE] mb-4" />
         {/* Statut micro-batch */}
         <div className="card">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
+          <p className="text-xs font-semibold text-[#64748B] uppercase tracking-widest mb-2">
             Micro-batch Vélib'
           </p>
           <LiveStatusBadge
@@ -116,7 +116,7 @@ export default function Sidebar({
             label="Flux actif"
           />
           {liveMetrics?.isLive && liveMetrics.data && (
-            <p className="text-xs text-slate-500 mt-1.5">
+            <p className="text-xs text-[#64748B] mt-1.5">
               Polling · toutes les 30 s
             </p>
           )}
@@ -129,9 +129,9 @@ export default function Sidebar({
 function StatRow({ label, value, unit }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-xs text-slate-500">{label}</span>
-      <span className="text-xs font-medium text-slate-300">
-        {value}{unit ? <span className="text-slate-500 ml-0.5">{unit}</span> : null}
+      <span className="text-xs text-[#64748B]">{label}</span>
+      <span className="text-xs font-medium text-[#1E293B]">
+        {value}{unit ? <span className="text-[#64748B] ml-0.5">{unit}</span> : null}
       </span>
     </div>
   );

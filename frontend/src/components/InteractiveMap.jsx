@@ -5,7 +5,7 @@ import wellknown from 'wellknown';
 import { indicatorColor } from '../utils/scoreColors';
 import { INDICATOR_OPTIONS } from './Sidebar';
 
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
   'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
@@ -13,6 +13,17 @@ const TILE_ATTR =
 const QUARTIERS_LOCAL = '/data/paris-quartiers.geojson';
 const QUARTIERS_API   = 'https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/quartier_paris/exports/geojson';
 const BAN_REVERSE_URL = 'https://api-adresse.data.gouv.fr/reverse/';
+
+const INDICATOR_ICONS = {
+  livability_score: 'assistant_navigation',
+  connectivity_score: 'wifi',
+  mobility_score: 'directions_bike',
+  health_env_score: 'eco',
+  tranquility_score: 'shield',
+  anime_score: 'theater_comedy',
+  calme_score: 'volume_off',
+  median_price: 'payments',
+};
 
 // ─────────────────────────────────────────────────────────────────
 // Contrôleur de vue (fitBounds / flyTo) — doit être dans MapContainer
@@ -116,9 +127,9 @@ export default function InteractiveMap({
     const isSelected = arrondissement === selectedArrondissement;
     return {
       fillColor:   indicatorColor(selectedIndicator, value, allValues),
-      fillOpacity: isSelected ? 0.85 : 0.65,
-      color:       isSelected ? '#818CF8' : '#0F172A',
-      weight:      isSelected ? 2.5 : 1,
+      fillOpacity: isSelected ? 0.9 : 0.75,
+      color:       isSelected ? '#0284C7' : '#9AA6B2',
+      weight:      isSelected ? 3 : 1.25,
     };
   }
 
@@ -130,9 +141,9 @@ export default function InteractiveMap({
       const isSelected = arrondissement === selectedArrondissement;
       layer.setStyle({
         fillColor:   indicatorColor(selectedIndicator, value, allValues),
-        fillOpacity: isSelected ? 0.85 : 0.65,
-        color:       isSelected ? '#818CF8' : '#0F172A',
-        weight:      isSelected ? 2.5 : 1,
+        fillOpacity: isSelected ? 0.9 : 0.75,
+        color:       isSelected ? '#0284C7' : '#9AA6B2',
+        weight:      isSelected ? 3 : 1.25,
       });
     });
   }, [selectedArrondissement]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -148,19 +159,19 @@ export default function InteractiveMap({
     });
     layer.on('mouseover', () => {
       if (arrondissement !== selectedArrondissement)
-        layer.setStyle({ fillOpacity: 0.85, weight: 2, color: '#475569' });
+        layer.setStyle({ fillOpacity: 0.88, weight: 2.25, color: '#64748B' });
     });
     layer.on('mouseout', () => {
       const isSel = arrondissement === selectedArrondissement;
       layer.setStyle({
-        fillOpacity: isSel ? 0.85 : 0.65,
-        color:       isSel ? '#818CF8' : '#0F172A',
-        weight:      isSel ? 2.5 : 1,
+        fillOpacity: isSel ? 0.9 : 0.75,
+        color:       isSel ? '#0284C7' : '#9AA6B2',
+        weight:      isSel ? 3 : 1.25,
       });
     });
     layer.bindTooltip(
       `<div style="font-size:12px;font-weight:600">${nom ?? `Paris ${arrondissement}e`}</div>
-       <div style="font-size:11px;color:#94A3B8">${formatIndicatorValue(selectedIndicator, feature.properties.value)}</div>`,
+       <div style="font-size:11px;color:#64748B">${formatIndicatorValue(selectedIndicator, feature.properties.value)}</div>`,
       { sticky: true, className: 'leaflet-tooltip-urban' },
     );
   }
@@ -179,7 +190,7 @@ export default function InteractiveMap({
   function onEachQuartierFeature(feature, layer) {
     const nom = feature.properties?.l_qu ?? feature.properties?.libelle ?? 'Quartier';
     // fillOpacity minuscule pour rendre la zone cliquable partout
-    layer.setStyle({ fillColor: '#A5B4FC', fillOpacity: 0.01 });
+    layer.setStyle({ fillColor: '#0EA5E9', fillOpacity: 0.03 });
 
     layer.on('click', async (e) => {
       L.DomEvent.stopPropagation(e); // empêche le clic arrondissement
@@ -191,12 +202,15 @@ export default function InteractiveMap({
       );
     });
 
-    layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.12, color: '#C7D2FE' }));
-    layer.on('mouseout',  () => layer.setStyle({ fillOpacity: 0.01, color: '#A5B4FC' }));
+    layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.2, color: '#0284C7' }));
+    layer.on('mouseout',  () => layer.setStyle({ fillOpacity: 0.03, color: '#0EA5E9' }));
 
     layer.bindTooltip(
-      `<div style="font-size:11px;color:#A5B4FC;font-weight:600">📍 ${nom}</div>
-       <div style="font-size:10px;color:#94A3B8">Cliquer pour l'adresse exacte</div>`,
+      `<div style="font-size:11px;color:#0284C7;font-weight:600">
+         <span class="map-icon" style="font-size:14px;vertical-align:-2px;margin-right:4px">pin_drop</span>
+         ${nom}
+       </div>
+       <div style="font-size:10px;color:#64748B">Cliquer pour l'adresse exacte</div>`,
       { sticky: true, className: 'leaflet-tooltip-urban' },
     );
   }
@@ -210,22 +224,26 @@ export default function InteractiveMap({
   }
 
   return (
-    <div className="relative w-full h-full min-h-[420px] rounded-xl overflow-hidden border border-slate-700">
+    <div className="relative w-full h-full min-h-[420px] rounded-xl overflow-hidden border border-[#B6C0CC]">
 
       {/* Badge indicateur actif */}
       <div className="absolute top-3 right-3 z-[1000]">
-        <span className="badge bg-slate-900/90 border border-slate-600 text-slate-300 backdrop-blur-sm">
-          {INDICATOR_OPTIONS.find((o) => o.id === selectedIndicator)?.icon} {indicatorLabel}
+        <span className="badge bg-[#F4F6F9]/90 border border-[#B6C0CC] text-[#1E293B] backdrop-blur-sm">
+          <span className="map-icon">
+            {INDICATOR_ICONS[selectedIndicator] ?? 'insights'}
+          </span>
+          <span>{indicatorLabel}</span>
         </span>
       </div>
 
       {/* Bouton retour vue globale */}
       {selectedArrondissement && (
         <button
-          className="absolute top-3 left-3 z-[1000] btn-primary text-xs shadow-lg backdrop-blur-sm"
+          className="absolute top-3 left-3 z-[1000] btn-primary text-xs shadow-lg backdrop-blur-sm flex items-center gap-1.5"
           onClick={handleBackToGlobal}
         >
-          ← Vue globale
+          <span className="map-icon">arrow_back</span>
+          Vue globale
         </button>
       )}
 
@@ -234,8 +252,8 @@ export default function InteractiveMap({
 
       {/* Badge quartiers actifs */}
       {selectedArrondissement && quartiersFiltered && (
-        <div className="absolute bottom-5 right-3 z-[1000] bg-slate-900/90 border border-indigo-400/40 rounded-lg px-2 py-1 text-xs backdrop-blur-sm flex items-center gap-1.5 text-indigo-300">
-          <span>📍</span>
+        <div className="absolute bottom-5 right-3 z-[1000] bg-[#F4F6F9]/90 border border-[#38BDF8]/60 rounded-lg px-2 py-1 text-xs backdrop-blur-sm flex items-center gap-1.5 text-[#0284C7]">
+          <span className="map-icon" style={{ fontSize: 14 }}>pin_drop</span>
           <span>Quartiers cliquables</span>
         </div>
       )}
@@ -266,9 +284,9 @@ export default function InteractiveMap({
             key={`q-${selectedArrondissement}`}
             data={quartiersFiltered}
             style={{
-              fillColor:   '#A5B4FC',
-              fillOpacity: 0.01,
-              color:       '#A5B4FC',
+              fillColor:   '#0EA5E9',
+              fillOpacity: 0.03,
+              color:       '#0EA5E9',
               weight:      1.5,
               dashArray:   '6 4',
             }}
@@ -283,15 +301,21 @@ export default function InteractiveMap({
             eventHandlers={{ remove: () => setQuartierPopup(null) }}
           >
             <div style={{ minWidth: 180 }}>
-              <p style={{ fontWeight: 700, marginBottom: 4, color: '#4F46E5' }}>
-                📍 {quartierPopup.nom}
+              <p style={{ fontWeight: 700, marginBottom: 4, color: '#0284C7' }}>
+                <span
+                  className="map-icon"
+                  style={{ fontSize: 16, verticalAlign: '-2px', marginRight: 4 }}
+                >
+                  pin_drop
+                </span>
+                {quartierPopup.nom}
               </p>
               {quartierPopup.loadingBan ? (
-                <p style={{ fontSize: 11, color: '#94A3B8' }}>Géocodage…</p>
+                <p style={{ fontSize: 11, color: '#64748B' }}>Géocodage…</p>
               ) : quartierPopup.address ? (
                 <p style={{ fontSize: 12 }}>{quartierPopup.address}</p>
               ) : (
-                <p style={{ fontSize: 11, color: '#94A3B8' }}>
+                <p style={{ fontSize: 11, color: '#64748B' }}>
                   {quartierPopup.lat.toFixed(5)}, {quartierPopup.lon.toFixed(5)}
                 </p>
               )}
@@ -306,16 +330,24 @@ export default function InteractiveMap({
               key={c.id || `${c.lat}-${c.lon}`}
               center={[c.lat, c.lon]}
               radius={5}
-              pathOptions={{ color: '#EA580C', fillColor: '#F97316', fillOpacity: 0.85, weight: 1.5 }}
+              pathOptions={{ color: '#F59E0B', fillColor: '#F59E0B', fillOpacity: 0.85, weight: 1.5 }}
             >
               <Popup>
                 <div style={{ minWidth: 190 }}>
-                  <p style={{ fontWeight: 600, marginBottom: 4 }}>🚧 {c.titre}</p>
+                  <p style={{ fontWeight: 600, marginBottom: 4 }}>
+                    <span
+                      className="map-icon"
+                      style={{ fontSize: 16, verticalAlign: '-2px', marginRight: 4 }}
+                    >
+                      construction
+                    </span>
+                    {c.titre}
+                  </p>
                   {c.categorie && (
-                    <p style={{ fontSize: 10, color: '#F97316', marginBottom: 4 }}>{c.categorie}</p>
+                    <p style={{ fontSize: 10, color: '#F59E0B', marginBottom: 4 }}>{c.categorie}</p>
                   )}
                   {c.description && (
-                    <p style={{ fontSize: 11, color: '#475569', marginBottom: 4 }}>{c.description}</p>
+                    <p style={{ fontSize: 11, color: '#64748B', marginBottom: 4 }}>{c.description}</p>
                   )}
                   {(c.date_debut || c.date_fin) && (
                     <p style={{ fontSize: 11 }}>
@@ -324,7 +356,7 @@ export default function InteractiveMap({
                     </p>
                   )}
                   {c.maitre_ouvrage && (
-                    <p style={{ fontSize: 10, color: '#94A3B8', marginTop: 4 }}>{c.maitre_ouvrage}</p>
+                    <p style={{ fontSize: 10, color: '#64748B', marginTop: 4 }}>{c.maitre_ouvrage}</p>
                   )}
                 </div>
               </Popup>
@@ -344,18 +376,23 @@ export default function InteractiveMap({
 function ColorLegend({ indicatorId }) {
   const isPrice = indicatorId === 'median_price';
   return (
-    <div className="absolute bottom-5 left-3 z-[1000] bg-slate-900/90 border border-slate-700 rounded-lg px-3 py-2 text-xs backdrop-blur-sm">
-      <p className="text-slate-400 mb-1.5 font-medium">{isPrice ? 'Prix m²' : 'Score'}</p>
+    <div className="absolute bottom-5 left-3 z-[1000] bg-[#F4F6F9]/95 border border-[#B6C0CC] rounded-lg px-3 py-2 text-xs backdrop-blur-sm">
+      <p className="text-[#64748B] mb-1.5 font-medium flex items-center gap-1">
+        <span className="map-icon" style={{ fontSize: 14, verticalAlign: '-2px' }}>
+          {isPrice ? 'payments' : 'insights'}
+        </span>
+        <span>{isPrice ? 'Prix m²' : 'Score'}</span>
+      </p>
       <div className="flex items-center gap-1.5">
         <div
           className="w-16 h-2 rounded-full"
           style={{
             background: isPrice
-              ? 'linear-gradient(to right, #10B981, #EF4444)'
-              : 'linear-gradient(to right, #EF4444, #F59E0B, #10B981)',
+              ? 'linear-gradient(to right, #22C55E, #F43F5E)'
+              : 'linear-gradient(to right, #F43F5E, #F59E0B, #22C55E)',
           }}
         />
-        <span className="text-slate-500">{isPrice ? 'Bas → Élevé' : '0 → 100'}</span>
+        <span className="text-[#64748B]">{isPrice ? 'Bas → Élevé' : '0 → 100'}</span>
       </div>
     </div>
   );

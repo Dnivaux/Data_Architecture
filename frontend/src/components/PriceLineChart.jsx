@@ -9,14 +9,14 @@ export default function PriceLineChart({ prices, loading }) {
   if (loading) {
     return (
       <div className="h-40 flex items-center justify-center">
-        <span className="text-slate-500 text-sm animate-pulse">Chargement des prix…</span>
+        <span className="text-[#64748B] text-sm animate-pulse">Chargement des prix…</span>
       </div>
     );
   }
 
   if (!prices || prices.length === 0) {
     return (
-      <div className="h-40 flex items-center justify-center text-slate-500 text-sm">
+      <div className="h-40 flex items-center justify-center text-[#64748B] text-sm">
         Aucune donnée DVF disponible
       </div>
     );
@@ -34,9 +34,9 @@ export default function PriceLineChart({ prices, loading }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-slate-400 uppercase tracking-wide">Prix médian DVF</span>
+        <span className="text-xs text-[#64748B] uppercase tracking-wide">Prix médian DVF</span>
         {trend && (
-          <span className={`text-xs font-medium ${+trend >= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+          <span className={`text-xs font-medium ${+trend >= 0 ? 'text-[#F43F5E]' : 'text-[#22C55E]'}`}>
             {+trend >= 0 ? '+' : ''}{trend} % depuis {first?.year}
           </span>
         )}
@@ -44,7 +44,7 @@ export default function PriceLineChart({ prices, loading }) {
 
       <ResponsiveContainer width="100%" height={160}>
         <LineChart data={sorted} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#D0D7DE" />
           <XAxis
             dataKey="year"
             tick={{ fill: '#64748B', fontSize: 11 }}
@@ -60,21 +60,21 @@ export default function PriceLineChart({ prices, loading }) {
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: '#1E293B',
-              border: '1px solid #334155',
+              backgroundColor: '#F4F6F9',
+              border: '1px solid #D0D7DE',
               borderRadius: 8,
               fontSize: 12,
             }}
-            labelStyle={{ color: '#F1F5F9' }}
-            itemStyle={{ color: '#06B6D4' }}
+            labelStyle={{ color: '#1E293B' }}
+            itemStyle={{ color: '#0284C7' }}
             formatter={(v) => [`${fmtInt(v)} €/m²`, 'Prix médian']}
           />
           <Line
             type="monotone"
             dataKey="median_price"
-            stroke="#06B6D4"
+            stroke="#0284C7"
             strokeWidth={2}
-            dot={{ fill: '#06B6D4', r: 3 }}
+            dot={{ fill: '#0284C7', r: 3 }}
             activeDot={{ r: 5 }}
             connectNulls
           />

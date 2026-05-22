@@ -44,9 +44,9 @@ class AppErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div className="h-screen flex flex-col items-center justify-center gap-4">
-          <span className="text-5xl">⚠️</span>
-          <p className="text-red-400 font-semibold text-lg">Erreur d'affichage</p>
-          <p className="text-slate-500 text-sm max-w-md text-center">{this.state.message}</p>
+          <span className="material-icon text-5xl">warning</span>
+          <p className="text-[#F43F5E] font-semibold text-lg">Erreur d'affichage</p>
+          <p className="text-[#64748B] text-sm max-w-md text-center">{this.state.message}</p>
           <button
             className="btn-primary mt-2"
             onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
@@ -63,15 +63,15 @@ class AppErrorBoundary extends Component {
 function LoadingScreen() {
   return (
     <div className="h-screen flex flex-col items-center justify-center gap-4">
-      <div className="text-4xl animate-bounce">🏙️</div>
-      <p className="text-slate-300 font-medium">Chargement des données Gold…</p>
-      <p className="text-slate-500 text-sm">Connexion à PostgreSQL via FastAPI</p>
+      <div className="material-icon text-4xl animate-bounce">location_city</div>
+      <p className="text-[#1E293B] font-medium">Chargement des données Gold…</p>
+      <p className="text-[#64748B] text-sm">Connexion à PostgreSQL via FastAPI</p>
       <div className="flex gap-1 mt-2">
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"
-            style={{ animationDelay: `${i * 0.15}s` }}
+            className="w-2 h-2 rounded-full animate-bounce"
+            style={{ backgroundColor: '#0284C7', animationDelay: `${i * 0.15}s` }}
           />
         ))}
       </div>
@@ -82,13 +82,13 @@ function LoadingScreen() {
 function ErrorScreen({ message }) {
   return (
     <div className="h-screen flex flex-col items-center justify-center gap-4">
-      <span className="text-5xl">⚠️</span>
-      <p className="text-red-400 font-semibold text-lg">Impossible de joindre l'API</p>
-      <p className="text-slate-500 text-sm max-w-md text-center leading-relaxed">
+      <span className="material-icon text-5xl">warning</span>
+      <p className="text-[#F43F5E] font-semibold text-lg">Impossible de joindre l'API</p>
+      <p className="text-[#64748B] text-sm max-w-md text-center leading-relaxed">
         {message}
       </p>
-      <p className="text-slate-600 text-xs mt-2">
-        Vérifiez que FastAPI tourne sur <code className="text-indigo-400">localhost:8000</code>
+      <p className="text-[#64748B] text-xs mt-2">
+        Vérifiez que FastAPI tourne sur <code className="text-[#0284C7]">localhost:8000</code>
       </p>
       <button
         className="btn-primary mt-2"

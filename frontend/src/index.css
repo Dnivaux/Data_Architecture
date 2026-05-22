@@ -6,94 +6,128 @@
   html,
   body,
   #root {
-    @apply bg-slate-900 text-slate-100 h-full;
+    @apply h-full;
+    background-color: #F4F6F9;
+    color: #1E293B;
     font-family: 'Inter', system-ui, sans-serif;
   }
 
   * {
-    @apply border-slate-700;
+    border-color: #D0D7DE;
   }
 
   ::-webkit-scrollbar {
     @apply w-1.5;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-slate-900;
+    background-color: #EAEFF5;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-slate-600 rounded-full;
+    background-color: #D0D7DE;
+    border-radius: 9999px;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-slate-800 border border-slate-700 rounded-xl p-4;
+    background-color: #EAEFF5;
+    border: 1px solid #D0D7DE;
+    border-radius: 0.75rem;
+    padding: 1rem;
   }
 
   .card-hover {
-    @apply card transition-all duration-200 hover:border-slate-500 hover:bg-slate-700 cursor-pointer;
+    @apply card transition-all duration-200 cursor-pointer;
+  }
+
+  .card-hover:hover {
+    border-color: #C3CBD5;
+    background-color: #E3E9F2;
   }
 
   .badge {
     @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium;
   }
 
+  .material-icon,
+  .map-icon {
+    font-family: 'Material Symbols Outlined';
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    font-size: 18px;
+    line-height: 1;
+  }
+
   .btn-primary {
-    @apply bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors;
+    @apply text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors;
+    background-color: #0284C7;
+  }
+
+  .btn-primary:hover {
+    background-color: #38BDF8;
   }
 
   .btn-ghost {
-    @apply text-slate-400 hover:text-slate-100 hover:bg-slate-700 text-sm px-3 py-1.5 rounded-lg transition-colors;
+    @apply text-sm px-3 py-1.5 rounded-lg transition-colors;
+    color: #64748B;
+  }
+
+  .btn-ghost:hover {
+    color: #1E293B;
+    background-color: #E2E8F0;
   }
 
   .score-bar-track {
-    @apply h-1.5 bg-slate-700 rounded-full overflow-hidden;
+    @apply h-1.5 rounded-full overflow-hidden;
+    background-color: #D0D7DE;
   }
 
   .select-field {
-    @apply w-full bg-slate-900 border border-slate-600 text-slate-100 text-sm rounded-lg px-3 py-2
-           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+    @apply w-full text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:border-transparent;
+    background-color: #F4F6F9;
+    border: 1px solid #D0D7DE;
+    color: #1E293B;
+    --tw-ring-color: #38BDF8;
   }
 }
 
-/* ── Leaflet overrides (thème dark) ─────────────────────────── */
+/* ── Leaflet overrides (thème light) ────────────────────────── */
 .leaflet-container {
-  background: #0F172A;
+  background: #EAEFF5;
   font-family: 'Inter', system-ui, sans-serif;
 }
 
 .leaflet-tooltip-urban {
-  background: rgba(15, 23, 42, 0.95) !important;
-  border: 1px solid #334155 !important;
+  background: rgba(244, 246, 249, 0.96) !important;
+  border: 1px solid #B6C0CC !important;
   border-radius: 8px !important;
-  color: #F1F5F9 !important;
+  color: #1E293B !important;
   font-size: 12px !important;
   padding: 6px 10px !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: 0 12px 20px rgba(30, 41, 59, 0.18) !important;
   backdrop-filter: blur(8px);
 }
 
 .leaflet-tooltip-urban::before {
-  border-top-color: #334155 !important;
+  border-top-color: #B6C0CC !important;
 }
 
 .leaflet-control-zoom a {
-  background: #1E293B !important;
-  color: #94A3B8 !important;
-  border-color: #334155 !important;
+  background: #F4F6F9 !important;
+  color: #64748B !important;
+  border-color: #D0D7DE !important;
 }
 
 .leaflet-control-zoom a:hover {
-  background: #334155 !important;
-  color: #F1F5F9 !important;
+  background: #E2E8F0 !important;
+  color: #1E293B !important;
 }
 
 .leaflet-control-attribution {
-  background: rgba(15, 23, 42, 0.8) !important;
-  color: #475569 !important;
+  background: rgba(244, 246, 249, 0.85) !important;
+  color: #64748B !important;
   font-size: 10px !important;
 }
 
 .leaflet-control-attribution a {
-  color: #64748B !important;
+  color: #0284C7 !important;
 }

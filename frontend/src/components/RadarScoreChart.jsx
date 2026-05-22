@@ -46,10 +46,10 @@ export default function RadarScoreChart({ primary, secondary, labelA = 'Sélecti
   return (
     <ResponsiveContainer width="100%" height={260}>
       <RadarChart data={merged} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-        <PolarGrid stroke="#334155" />
+        <PolarGrid stroke="#D0D7DE" />
         <PolarAngleAxis
           dataKey="subject"
-          tick={{ fill: '#94A3B8', fontSize: 11 }}
+          tick={{ fill: '#64748B', fontSize: 11 }}
         />
         <PolarRadiusAxis
           angle={90}
@@ -60,8 +60,8 @@ export default function RadarScoreChart({ primary, secondary, labelA = 'Sélecti
         <Radar
           name={labelA}
           dataKey={labelA}
-          stroke="#6366F1"
-          fill="#6366F1"
+          stroke="#0284C7"
+          fill="#0284C7"
           fillOpacity={0.35}
           strokeWidth={2}
         />
@@ -69,19 +69,19 @@ export default function RadarScoreChart({ primary, secondary, labelA = 'Sélecti
           <Radar
             name={labelB}
             dataKey={labelB}
-            stroke="#06B6D4"
-            fill="#06B6D4"
+            stroke="#38BDF8"
+            fill="#38BDF8"
             fillOpacity={0.25}
             strokeWidth={2}
           />
         )}
         <Tooltip
-          contentStyle={{ backgroundColor: '#1E293B', border: '1px solid #334155', borderRadius: 8 }}
-          labelStyle={{ color: '#F1F5F9', fontSize: 12 }}
-          itemStyle={{ color: '#94A3B8', fontSize: 12 }}
+          contentStyle={{ backgroundColor: '#F4F6F9', border: '1px solid #D0D7DE', borderRadius: 8 }}
+          labelStyle={{ color: '#1E293B', fontSize: 12 }}
+          itemStyle={{ color: '#64748B', fontSize: 12 }}
           formatter={(v) => [`${v} / 100`]}
         />
-        {dataB && <Legend wrapperStyle={{ fontSize: 12, color: '#94A3B8' }} />}
+        {dataB && <Legend wrapperStyle={{ fontSize: 12, color: '#64748B' }} />}
       </RadarChart>
     </ResponsiveContainer>
   );
@@ -89,7 +89,7 @@ export default function RadarScoreChart({ primary, secondary, labelA = 'Sélecti
 
 function EmptyState() {
   return (
-    <div className="h-64 flex items-center justify-center text-slate-500 text-sm">
+    <div className="h-64 flex items-center justify-center text-[#64748B] text-sm">
       Cliquez sur un arrondissement pour afficher son profil
     </div>
   );

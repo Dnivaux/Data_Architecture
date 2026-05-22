@@ -15,21 +15,21 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
 
   const kpis = [
     {
-      icon: '🏠',
+      icon: 'home',
       label: 'Prix médian',
       value: fmtPrice(d.median_price),
       subValue: 'Données DVF (dernière année)',
       score: null,
     },
     {
-      icon: '📊',
+      icon: 'insights',
       label: 'Vivabilité composite',
       value: fmtScoreShort(d.livability_score),
       subValue: 'Score global pondéré',
       score: d.livability_score,
     },
     {
-      icon: '🚲',
+      icon: 'directions_bike',
       label: 'Mobilité',
       value: fmtScoreShort(d.mobility_score),
       subValue: d.station_count_velib != null
@@ -39,7 +39,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       isLive: mobilityLive,
     },
     {
-      icon: '📡',
+      icon: 'wifi',
       label: 'Connectivité',
       value: fmtScoreShort(d.connectivity_score),
       subValue: d.pct_eligible_ftth != null
@@ -48,7 +48,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       score: d.connectivity_score,
     },
     {
-      icon: '🌿',
+      icon: 'eco',
       label: 'Santé Environnementale',
       value: fmtScoreShort(d.health_env_score),
       subValue: d.nb_ilots_fraicheur != null
@@ -57,7 +57,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       score: d.health_env_score,
     },
     {
-      icon: '🏛️',
+      icon: 'apartment',
       label: 'Logements sociaux',
       value: fmtPct(d.social_housing_pct),
       subValue: `${fmtInt(d.bar_count)} bars · ${fmtInt(d.park_count)} parcs`,
@@ -83,11 +83,11 @@ function KPISkeleton({ loading = false }) {
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className={`card ${loading ? 'animate-pulse' : ''}`}>
-          <div className="h-3 bg-slate-700 rounded w-2/3 mb-3" />
-          <div className="h-7 bg-slate-700 rounded w-1/2 mb-2" />
-          <div className="h-2 bg-slate-700 rounded w-full" />
+          <div className="h-3 bg-[#D0D7DE] rounded w-2/3 mb-3" />
+          <div className="h-7 bg-[#D0D7DE] rounded w-1/2 mb-2" />
+          <div className="h-2 bg-[#D0D7DE] rounded w-full" />
           {!loading && i === 0 && (
-            <p className="text-xs text-slate-600 mt-2">Aucune donnée</p>
+            <p className="text-xs text-[#64748B] mt-2">Aucune donnée</p>
           )}
         </div>
       ))}

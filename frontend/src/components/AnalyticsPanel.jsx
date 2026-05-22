@@ -43,10 +43,10 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
 
       {/* Titre */}
       <div>
-        <h2 className="text-sm font-semibold text-slate-100">
+        <h2 className="text-sm font-semibold text-[#1E293B]">
           {name ?? 'Vue globale — Paris'}
         </h2>
-        <p className="text-xs text-slate-500 mt-0.5">
+        <p className="text-xs text-[#64748B] mt-0.5">
           {selectedArrondissement
             ? fmtArrondissement(selectedArrondissement)
             : '20 arrondissements · Sélectionnez un arrondissement sur la carte'}
@@ -56,7 +56,7 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
       {/* Comparaison */}
       {selectedArrondissement && (
         <div>
-          <label className="text-xs text-slate-400 mb-1 block">Comparer avec</label>
+          <label className="text-xs text-[#64748B] mb-1 block">Comparer avec</label>
           <select className="select-field" value={compareWith} onChange={handleCompare}>
             <option value="">— Choisir un arrondissement —</option>
             {Array.from({ length: 20 }, (_, i) => i + 1)
@@ -72,7 +72,7 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
 
       {/* Radar Chart */}
       <div className="card">
-        <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">
+        <p className="text-xs text-[#64748B] uppercase tracking-wide mb-1">
           Profil des scores
         </p>
         <RadarScoreChart
@@ -82,7 +82,7 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
           labelB={compareWith ? `Paris ${compareWith}e` : undefined}
         />
         {comparing && (
-          <p className="text-xs text-slate-500 text-center mt-1 animate-pulse">
+          <p className="text-xs text-[#64748B] text-center mt-1 animate-pulse">
             Chargement de la comparaison…
           </p>
         )}
@@ -92,10 +92,10 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
       <div className="card">
         {pricesError && !pricesLoading ? (
           <div className="h-40 flex flex-col items-center justify-center gap-2">
-            <span className="text-slate-500 text-xs uppercase tracking-wide">Prix médian DVF</span>
-            <span className="text-amber-500/80 text-xs text-center leading-relaxed">
+            <span className="text-[#64748B] text-xs uppercase tracking-wide">Prix médian DVF</span>
+            <span className="text-[#F59E0B] text-xs text-center leading-relaxed">
               Données indisponibles<br />
-              <span className="text-slate-600">(table Gold non peuplée)</span>
+              <span className="text-[#64748B]">(table Gold non peuplée)</span>
             </span>
           </div>
         ) : (
@@ -117,14 +117,19 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
 // ─────────────────────────────────────────────────────────────────
 // Bloc connectivité / meilleur opérateur
 // ─────────────────────────────────────────────────────────────────
-const OP_ICONS = { orange: '🟠', sfr: '🔴', bouygues: '🔵', free: '🟣' };
+const OP_ICONS = {
+  orange: { icon: 'fiber_manual_record', color: '#F59E0B' },
+  sfr: { icon: 'fiber_manual_record', color: '#F43F5E' },
+  bouygues: { icon: 'fiber_manual_record', color: '#0284C7' },
+  free: { icon: 'fiber_manual_record', color: '#7C3AED' },
+};
 
 function ConnectivityDetail({ data, loading }) {
   if (loading) {
     return (
       <div className="card">
-        <p className="text-xs text-slate-400 uppercase tracking-wide mb-2">Réseau</p>
-        <p className="text-xs text-slate-500 animate-pulse">Chargement…</p>
+        <p className="text-xs text-[#64748B] uppercase tracking-wide mb-2">Réseau</p>
+        <p className="text-xs text-[#64748B] animate-pulse">Chargement…</p>
       </div>
     );
   }
@@ -134,26 +139,26 @@ function ConnectivityDetail({ data, loading }) {
 
   return (
     <div className="card">
-      <p className="text-xs text-slate-400 uppercase tracking-wide mb-3">Réseau &amp; Connectivité</p>
+      <p className="text-xs text-[#64748B] uppercase tracking-wide mb-3">Réseau &amp; Connectivité</p>
 
       {/* Meilleurs opérateurs */}
       <div className="flex gap-3 mb-3">
         {best_4g && (
-          <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">+ d'antennes 4G</p>
-            <p className="text-xs font-semibold text-cyan-300 mt-0.5">{best_4g}</p>
+          <div className="flex-1 bg-[#F4F6F9] border border-[#D0D7DE] rounded-lg p-2 text-center">
+            <p className="text-[10px] text-[#64748B] uppercase">Meilleur 4G</p>
+            <p className="text-xs font-semibold text-[#0284C7] mt-0.5">{best_4g}</p>
           </div>
         )}
         {best_5g && (
-          <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">+ d'antennes 5G</p>
-            <p className="text-xs font-semibold text-violet-300 mt-0.5">{best_5g}</p>
+          <div className="flex-1 bg-[#F4F6F9] border border-[#D0D7DE] rounded-lg p-2 text-center">
+            <p className="text-[10px] text-[#64748B] uppercase">Meilleur 5G</p>
+            <p className="text-xs font-semibold text-[#38BDF8] mt-0.5">{best_5g}</p>
           </div>
         )}
         {ftth_pct != null && (
-          <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Fibre éligible</p>
-            <p className="text-xs font-semibold text-emerald-300 mt-0.5">{ftth_pct} %</p>
+          <div className="flex-1 bg-[#F4F6F9] border border-[#D0D7DE] rounded-lg p-2 text-center">
+            <p className="text-[10px] text-[#64748B] uppercase">Fibre</p>
+            <p className="text-xs font-semibold text-[#22C55E] mt-0.5">{ftth_pct} %</p>
           </div>
         )}
       </div>
@@ -161,22 +166,27 @@ function ConnectivityDetail({ data, loading }) {
       {/* Détail par opérateur (% de part d'antennes dans l'arrondissement) */}
       {operators.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          <p className="text-[10px] text-slate-600 mb-1">Part des antennes par opérateur (source ARCEP 2025-T4)</p>
+          <p className="text-[10px] text-[#64748B] mb-1">Part des antennes par opérateur (source ARCEP 2025-T4)</p>
           {operators.map((op) => (
             <div key={op.operateur} className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1.5 text-slate-300 w-32">
-                <span>{OP_ICONS[op.operateur] ?? '📶'}</span>
+              <span className="flex items-center gap-1.5 text-[#1E293B] w-32">
+                <span
+                  className="material-icon"
+                  style={{ color: OP_ICONS[op.operateur]?.color ?? '#0284C7' }}
+                >
+                  {OP_ICONS[op.operateur]?.icon ?? 'signal_cellular_alt'}
+                </span>
                 {op.label}
               </span>
               <div className="flex gap-2">
                 {op.pct_pop_4g != null && (
-                  <span className="text-cyan-400">4G&nbsp;{op.pct_pop_4g}%</span>
+                  <span className="text-[#0284C7]">4G&nbsp;{op.pct_pop_4g}%</span>
                 )}
                 {op.pct_pop_5g != null && (
-                  <span className="text-violet-400">5G&nbsp;{op.pct_pop_5g}%</span>
+                  <span className="text-[#38BDF8]">5G&nbsp;{op.pct_pop_5g}%</span>
                 )}
                 {op.pct_pop_4g == null && op.pct_pop_5g == null && (
-                  <span className="text-slate-600">—</span>
+                  <span className="text-[#64748B]">—</span>
                 )}
               </div>
             </div>
@@ -185,7 +195,7 @@ function ConnectivityDetail({ data, loading }) {
       )}
 
       {operators.length === 0 && !best_4g && ftth_pct == null && (
-        <p className="text-xs text-slate-600">Données ARCEP non disponibles — relancer le pipeline</p>
+        <p className="text-xs text-[#64748B]">Données ARCEP non disponibles — relancer le pipeline</p>
       )}
     </div>
   );
@@ -193,28 +203,28 @@ function ConnectivityDetail({ data, loading }) {
 
 function MetricsDetail({ data }) {
   const rows = [
-    { label: 'Stations Vélib\'',     value: fmtInt(data.station_count_velib),    icon: '🚲' },
-    { label: 'Vélos dispos (moy.)',  value: data.avg_bikes_available != null ? `${data.avg_bikes_available?.toFixed(1)}` : '—', icon: '🔄' },
-    { label: 'Îlots de fraîcheur',  value: fmtInt(data.nb_ilots_fraicheur),     icon: '🌳' },
-    { label: 'Arbres / km²',        value: fmtInt(data.arbres_per_km2),         icon: '🌲' },
-    { label: 'Crimes (total)',       value: fmtInt(data.crime_count_total),      icon: '🔒' },
-    { label: 'Taux / 1 000 hab.',   value: data.crime_rate_per_1000 != null ? `${data.crime_rate_per_1000?.toFixed(1)}` : '—', icon: '📉' },
-    { label: '% fibre éligible',    value: data.pct_eligible_ftth != null ? `${Math.round(data.pct_eligible_ftth)} %` : '—', icon: '📡' },
-    { label: '% couv. 4G',          value: data.pct_pop_4g_mean   != null ? `${Math.round(data.pct_pop_4g_mean)} %` : '—',   icon: '📶' },
+    { label: 'Stations Vélib\'',     value: fmtInt(data.station_count_velib),    icon: 'directions_bike' },
+    { label: 'Vélos dispos (moy.)',  value: data.avg_bikes_available != null ? `${data.avg_bikes_available?.toFixed(1)}` : '—', icon: 'sync' },
+    { label: 'Îlots de fraîcheur',  value: fmtInt(data.nb_ilots_fraicheur),     icon: 'park' },
+    { label: 'Arbres / km²',        value: fmtInt(data.arbres_per_km2),         icon: 'forest' },
+    { label: 'Crimes (total)',       value: fmtInt(data.crime_count_total),      icon: 'lock' },
+    { label: 'Taux / 1 000 hab.',   value: data.crime_rate_per_1000 != null ? `${data.crime_rate_per_1000?.toFixed(1)}` : '—', icon: 'trending_down' },
+    { label: '% fibre éligible',    value: data.pct_eligible_ftth != null ? `${Math.round(data.pct_eligible_ftth)} %` : '—', icon: 'settings_ethernet' },
+    { label: '% couv. 4G',          value: data.pct_pop_4g_mean   != null ? `${Math.round(data.pct_pop_4g_mean)} %` : '—',   icon: 'signal_cellular_alt' },
   ].filter((r) => r.value !== '—' && r.value !== 'undefined' && r.value != null);
 
   if (rows.length === 0) return null;
 
   return (
     <div className="card">
-      <p className="text-xs text-slate-400 uppercase tracking-wide mb-3">Métriques détaillées</p>
+      <p className="text-xs text-[#64748B] uppercase tracking-wide mb-3">Métriques détaillées</p>
       <div className="grid grid-cols-2 gap-y-2 gap-x-4">
         {rows.map(({ label, value, icon }) => (
           <div key={label} className="flex items-center gap-1.5">
-            <span className="text-base" role="img">{icon}</span>
+            <span className="material-icon text-base">{icon}</span>
             <div>
-              <p className="text-xs text-slate-500 leading-tight">{label}</p>
-              <p className="text-sm font-medium text-slate-200">{value}</p>
+              <p className="text-xs text-[#64748B] leading-tight">{label}</p>
+              <p className="text-sm font-medium text-[#1E293B]">{value}</p>
             </div>
           </div>
         ))}
