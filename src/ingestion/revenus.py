@@ -18,6 +18,8 @@ from pathlib import Path
 import requests
 import pandas as pd
 
+from datetime import date
+
 from .base import get_logger, save_parquet
 
 LOG_DIR = Path(__file__).parents[2] / "logs"
@@ -47,7 +49,7 @@ def check_insee_health() -> bool:
     """Vérifie si l'archive ZIP de l'INSEE est toujours disponible (Évite les erreurs 404)."""
     logger = logging.getLogger("revenus_health")
     try:
-        response = requests.head(INSEE_ZIP_URL, timeout=5)
+        response = requests.head(INSEE_ZIP_URL, timeout=5, allow_redirects=True)
         if response.status_code == 200:
             logger.info("✅ Archive INSEE REACHABLE (HTTP 200).")
             return True
@@ -74,13 +76,14 @@ def ingest(year: int = 2021) -> pd.DataFrame:
         )
         return pd.DataFrame(columns=BRONZE_COLUMNS)
 
+    # Health check informatif : on n'abandonne PAS si le HEAD échoue (certains
+    # serveurs bloquent HEAD) — on tente quand même le téléchargement GET.
     if not check_insee_health():
-        logger.error("Health check failed. Annulation de l'ingestion des revenus.")
-        return pd.DataFrame(columns=BRONZE_COLUMNS)
+        logger.warning("Health check non concluant — tentative de téléchargement directe quand même.")
 
     logger.info(f"Downloading archive from {INSEE_ZIP_URL}...")
     try:
-        file_res = requests.get(INSEE_ZIP_URL, timeout=60)
+        file_res = requests.get(INSEE_ZIP_URL, timeout=120, allow_redirects=True)
         file_res.raise_for_status()
     except requests.RequestException as e:
         logger.error(f"Failed to download archive: {e}")
@@ -107,9 +110,19 @@ def ingest(year: int = 2021) -> pd.DataFrame:
         f"{total_paris} conservés (Paris) -> {total_dropped} hors-périmètre ignorés."
     )
 
-    col_med = next((col for col in paris_df.columns if 'DISP_MED' in col), None)
-    col_gini = next((col for col in paris_df.columns if 'DISP_GI' in col), None)
-    col_pov = next((col for col in paris_df.columns if 'DISP_TP60' in col), None)
+    # L'INSEE publie deux variantes : DISP_ (revenu disponible) et DEC_ (revenu
+    # déclaré). Le fichier 2021 DEC utilise DEC_MED21 / DEC_GI21 / DEC_TP6021.
+    # On détecte les deux préfixes (insensible à la casse).
+    def _find_col(columns, *tokens) -> str | None:
+        for col in columns:
+            upper = col.upper()
+            if any(tok in upper for tok in tokens):
+                return col
+        return None
+
+    col_med = _find_col(paris_df.columns, "DISP_MED", "DEC_MED")
+    col_gini = _find_col(paris_df.columns, "DISP_GI", "DEC_GI")
+    col_pov = _find_col(paris_df.columns, "DISP_TP60", "DEC_TP60")
 
     missing_cols = [name for name, col in [("Revenu Médian", col_med), ("Gini", col_gini), ("Taux Pauvreté", col_pov)] if not col]
     if missing_cols:
@@ -131,7 +144,20 @@ def ingest(year: int = 2021) -> pd.DataFrame:
 
     out_df = out_df[BRONZE_COLUMNS]
 
-    logger.info(f"Ingestion successful: {len(out_df)} IRIS records ready for Bronze.")
+    if out_df.empty:
+        logger.warning("Revenus : aucune ligne parisienne après filtrage — Bronze non écrit.")
+        return out_df
+
+    # [FIX] Persistance Bronze : l'ancienne version retournait le DataFrame
+    # sans jamais l'écrire → data/bronze/revenus restait vide.
+    path = save_parquet(
+        out_df,
+        source="revenus",
+        partition_col="date",
+        partition_value=date.today().isoformat(),
+        filename="part-0.parquet",
+    )
+    logger.info("Ingestion successful: %d IRIS records → %s", len(out_df), path)
 
     return out_df
 

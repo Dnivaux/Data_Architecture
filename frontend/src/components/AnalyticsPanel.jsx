@@ -203,16 +203,21 @@ function ConnectivityDetail({ data, loading }) {
 
 function MetricsDetail({ data }) {
   const rows = [
-    { label: "Prix m² médian DVF", value: fmtPrice(data.median_price_dvf_annee_courante), icon: 'home' },
+    { label: "Prix m² médian DVF", value: fmtPrice(data.median_price), icon: 'home' },
     { label: "Logements sociaux", value: fmtInt(data.nombre_logements_sociaux), icon: 'apartment' },
     { label: "Éligibles fibre", value: data.pct_eligible_ftth != null ? `${Math.round(data.pct_eligible_ftth)}%` : '—', icon: 'signal_wifi_4_bar' },
     { label: "Couv. 4G/5G (débit moy.)", value: data.avg_rate_dl_5g_mbps != null ? `${Math.round(data.avg_rate_dl_5g_mbps)} Mbps` : '—', icon: 'phone_iphone' },
     { label: "Stations Vélib'", value: fmtInt(data.station_count_velib), icon: 'directions_bike' },
     { label: 'Vélos dispos (moy.)',  value: data.avg_bikes_available != null ? `${data.avg_bikes_available?.toFixed(1)}` : '—', icon: 'sync' },
-    { label: "Stations TC", value: fmtInt(data.station_count_prim), icon: 'tram' },
+    { label: 'Stations métro', value: fmtInt(data.metro_count), icon: 'subway' },
+    { label: 'Gares RER',      value: fmtInt(data.rer_count),   icon: 'train' },
+    { label: 'Arrêts tram',    value: fmtInt(data.tram_count),  icon: 'tram' },
+    { label: 'Arrêts bus',     value: fmtInt(data.bus_count),   icon: 'directions_bus' },
     { label: "Parcs & jardins", value: fmtInt(data.park_count), icon: 'park' },
     { label: 'Îlots de fraîcheur',  value: fmtInt(data.nb_ilots_fraicheur),     icon: 'ac_unit' },
     { label: 'Arbres / km²',        value: fmtInt(data.arbres_per_km2),         icon: 'forest' },
+    { label: "Qualité de l'air (AQI)", value: data.european_aqi != null ? `${Math.round(data.european_aqi)}` : '—', icon: 'air' },
+    { label: 'Risque pollen',       value: data.pollen_risk ?? '—',             icon: 'grass' },
     { label: "Restaurants", value: fmtInt(data.restaurant_count), icon: 'restaurant' },
     { label: "Bars", value: fmtInt(data.bar_count), icon: 'local_bar' },
     { label: "Commerces", value: fmtInt(data.shop_count), icon: 'storefront' },

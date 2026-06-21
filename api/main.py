@@ -26,13 +26,16 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.dependencies import get_db_status, verify_db_connection
-from api.routers import chantiers, comparison, connectivity, mobility, poi, prices, scores
+from api.routers import (
+    chantiers, comparison, connectivity, live, mobility, poi, prices, scores, social_housing,
+)
 from api.schemas import HealthCheck, HealthCheckExtended
+from api.security import install_rate_limiting, require_api_key
 
 # ---------------------------------------------------------------------------
 # Logging structuré (format : timestamp | level | logger | message)
@@ -95,6 +98,9 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Quotas (rate limiting) — no-op si slowapi non installé
+install_rate_limiting(app)
+
 # ---------------------------------------------------------------------------
 # Middleware 1 — Mesure du temps de traitement (Critère C2.4)
 # ---------------------------------------------------------------------------
@@ -150,13 +156,20 @@ app.add_middleware(
 # Routeurs
 # ---------------------------------------------------------------------------
 
-app.include_router(scores.router,       prefix="/api")
-app.include_router(poi.router,          prefix="/api")
-app.include_router(prices.router,       prefix="/api")
-app.include_router(comparison.router,   prefix="/api")
-app.include_router(mobility.router,     prefix="/api")
-app.include_router(chantiers.router,    prefix="/api")
-app.include_router(connectivity.router, prefix="/api")
+# Toutes les routes /api exigent une clé d'API valide (X-API-Key) si API_KEYS
+# est défini ; sinon l'auth est désactivée (mode dev). Voir api/security.py.
+_auth = [Depends(require_api_key)]
+
+app.include_router(scores.router,       prefix="/api", dependencies=_auth)
+app.include_router(poi.router,          prefix="/api", dependencies=_auth)
+app.include_router(prices.router,       prefix="/api", dependencies=_auth)
+app.include_router(comparison.router,   prefix="/api", dependencies=_auth)
+app.include_router(mobility.router,     prefix="/api", dependencies=_auth)
+app.include_router(chantiers.router,    prefix="/api", dependencies=_auth)
+app.include_router(connectivity.router, prefix="/api", dependencies=_auth)
+app.include_router(social_housing.router, prefix="/api", dependencies=_auth)
+# Routeur temps réel (WebSocket) : auth gérée en interne (query param pour le WS)
+app.include_router(live.router, prefix="/api")
 
 # ---------------------------------------------------------------------------
 # Endpoints système
@@ -220,6 +233,9 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True,
+        # Ne surveiller QUE le code API : évite que le reloader thrash sur
+        # data/, logs/, frontend/node_modules (écritures pipeline / npm install).
+        reload_dirs=["api"],
         log_level="info",
         access_log=False,  # désactivé : notre middleware gère le logging
     )

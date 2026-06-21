@@ -39,6 +39,7 @@ def _run_static_indicators() -> None:
         ("Connectivité & Télétravail", "src.ingestion.connectivity",       "ingest"),
         ("Santé Environnementale",     "src.ingestion.health_environment", "ingest"),
         ("Tranquillité vs Dynamisme",  "src.ingestion.tranquility",        "ingest"),
+        ("Référentiel Transport ICAR", "src.ingestion.icar_referentiel",   "ingest_icar"),
     ]
     logger.info(">>> BRONZE — indicateurs stratégiques (3 sources statiques)")
     for label, module_path, func_name in indicators:
@@ -128,8 +129,10 @@ def run_full_pipeline(
         logger.info("[2/4] Indicateurs stratégiques statiques")
         _run_static_indicators()
 
-        # Batch mobilité unique (optionnel)
-        if mobility_once:
+        # Batch mobilité unique : exécuté par défaut (sauf si le daemon tourne déjà).
+        # Garantit qu'un instantané Vélib' alimente la couche Silver mobilité même
+        # sans --mobility-once explicite.
+        if mobility_once or not mobility_daemon:
             logger.info("[3/4] Batch mobilité unique (Vélib' + PRIM)")
             try:
                 from src.ingestion.mobility_micro_batch import run_once
@@ -142,7 +145,7 @@ def run_full_pipeline(
             except Exception as exc:
                 logger.error("    Mobilité batch échoué : %s", exc, exc_info=True)
         else:
-            logger.info("[3/4] Batch mobilité ignoré (pas de --mobility-once)")
+            logger.info("[3/4] Batch mobilité géré par le daemon (--mobility-daemon)")
 
         logger.info("[4/4] Bronze complet")
 

@@ -67,10 +67,22 @@ class ArrondissementDetail(BaseModel):
     station_count_velib: Optional[int]   = Field(None, description="Nb stations Vélib'")
     avg_bikes_available: Optional[float] = Field(None, description="Disponibilité moy. vélos")
 
+    # Transports en commun (ICAR / IDFM) par mode
+    transit_stop_count:  Optional[int]   = Field(None, description="Total arrêts transports en commun")
+    metro_count:         Optional[int]   = Field(None, description="Nb stations de métro")
+    rer_count:           Optional[int]   = Field(None, description="Nb gares RER")
+    tram_count:          Optional[int]   = Field(None, description="Nb arrêts de tram")
+    bus_count:           Optional[int]   = Field(None, description="Nb arrêts de bus")
+
     # Métriques clés santé environnementale
     nb_ilots_fraicheur:  Optional[int]   = Field(None, description="Nb îlots de fraîcheur")
     surface_fraicheur_ha:Optional[float] = Field(None, description="Surface espaces verts (ha)")
     arbres_per_km2:      Optional[float] = Field(None, description="Densité arborée")
+
+    # Qualité de l'air & pollen (Open-Meteo / CAMS Europe)
+    european_aqi:        Optional[float] = Field(None, description="Indice européen qualité air (0 = excellent)")
+    pollen_total:        Optional[float] = Field(None, description="Pic pollinique journalier total (grains/m³)")
+    pollen_risk:         Optional[str]   = Field(None, description="Risque pollen : Faible|Modéré|Élevé|Très élevé")
 
     # Métriques clés tranquillité
     crime_count_total:   Optional[int]   = Field(None, description="Délits enregistrés")
@@ -114,6 +126,15 @@ class PriceTimeline(BaseModel):
     year:              int            = Field(..., ge=2014, le=2030)
     median_price:      Optional[float] = None
     transaction_count: int            = Field(0)
+
+
+class SocialHousingPoint(BaseModel):
+    """Parc social financé pour un arrondissement × année (évolution)."""
+
+    arrondissement:     int           = Field(..., ge=1, le=20)
+    annee:              int           = Field(..., ge=1990, le=2035)
+    logements_finances: int           = Field(0, description="Logements agréés cette année")
+    logements_cumules:  int           = Field(0, description="Stock cumulé depuis la 1re année")
 
 
 # ---------------------------------------------------------------------------

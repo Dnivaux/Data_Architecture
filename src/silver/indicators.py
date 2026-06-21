@@ -191,8 +191,17 @@ def build_connectivity_silver(logger: logging.Logger | None = None) -> pd.DataFr
 
     # --- ARCEP Mobile ---
     df_mob = read_parquet("arcep_mobile")
-    if not df_mob.empty and "commune_code" in df_mob.columns:
-        df_mob["arrondissement"] = _commune_to_arrondissement(df_mob["commune_code"])
+    if not df_mob.empty and (
+        "commune_code" in df_mob.columns or "arrondissement" in df_mob.columns
+    ):
+        # Le Bronze mobile porte déjà l'arrondissement (issu d'un sjoin) ; le
+        # commune_code est "75056" (Paris global) → on privilégie l'arrondissement.
+        if "arrondissement" in df_mob.columns and pd.to_numeric(
+            df_mob["arrondissement"], errors="coerce"
+        ).notna().any():
+            df_mob["arrondissement"] = pd.to_numeric(df_mob["arrondissement"], errors="coerce")
+        else:
+            df_mob["arrondissement"] = _commune_to_arrondissement(df_mob["commune_code"])
         df_mob = df_mob.dropna(subset=["arrondissement"])
         df_mob["arrondissement"] = df_mob["arrondissement"].astype(int)
 
@@ -358,7 +367,8 @@ def build_mobility_silver(
             for col in ["avg_bikes_available", "avg_docks_available",
                         "avg_bikes_pct", "electric_bike_ratio"]:
                 if col in vel_agg.columns:
-                    vel_agg[col] = vel_agg[col].round(2)
+                    # to_numeric : certaines colonnes peuvent être 'object' (NA-only)
+                    vel_agg[col] = pd.to_numeric(vel_agg[col], errors="coerce").round(2)
             base = base.merge(vel_agg, on="arrondissement", how="left")
             batches = df_vel["batch_ts"].nunique() if "batch_ts" in df_vel.columns else "?"
             log.info("Vélib' agrégé : %d arrondissements, %s batches",

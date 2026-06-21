@@ -22,8 +22,13 @@ const INDICATOR_ICONS = {
   tranquility_score: 'shield',
   anime_score: 'theater_comedy',
   calme_score: 'volume_off',
+  european_aqi: 'air',
+  pollen_total: 'grass',
   median_price: 'payments',
 };
+
+// Indicateurs en valeur brute « bas = mieux » (échelle inversée pour la légende)
+const LOWER_BETTER = new Set(['median_price', 'european_aqi', 'pollen_total']);
 
 // ─────────────────────────────────────────────────────────────────
 // Contrôleur de vue (fitBounds / flyTo) — doit être dans MapContainer
@@ -366,7 +371,7 @@ export default function InteractiveMap({
 function ColorLegend({ indicatorId }) {
   const indicator = INDICATOR_OPTIONS.find((o) => o.id === indicatorId) || {};
   const { label = 'Score', icon = 'insights' } = indicator;
-  const isPrice = indicatorId === 'median_price';
+  const isPrice = LOWER_BETTER.has(indicatorId);
 
   return (
     <div className="absolute bottom-5 left-3 z-[1000] bg-[#F4F6F9]/95 border border-[#B6C0CC] rounded-lg px-3 py-2 text-xs backdrop-blur-sm">
@@ -398,5 +403,9 @@ function formatIndicatorValue(indicatorId, value) {
   if (value == null) return 'Donnée manquante';
   if (indicatorId === 'median_price')
     return `${new Intl.NumberFormat('fr-FR').format(Math.round(value))} €/m²`;
+  if (indicatorId === 'european_aqi')
+    return `AQI ${Math.round(value)} (Europe)`;
+  if (indicatorId === 'pollen_total')
+    return `${Math.round(value)} grains/m³`;
   return `${value.toFixed(1)} / 100`;
 }

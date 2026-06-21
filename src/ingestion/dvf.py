@@ -42,7 +42,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from .base import BRONZE_ROOT, get_logger, save_parquet
+from .base import BRONZE_ROOT, build_session, get_logger, save_parquet
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -54,6 +54,13 @@ LOG_DIR = Path(__file__).parents[2] / "logs"
 CHUNK_SIZE = 200_000
 
 VALID_TYPES = {"Appartement", "Maison"}
+
+# --- Source automatisée : geo-dvf (1 CSV par commune, déjà géocodé) ---
+# https://files.data.gouv.fr/geo-dvf/latest/csv/<année>/communes/75/<insee>.csv
+GEODVF_BASE = "https://files.data.gouv.fr/geo-dvf/latest/csv"
+PARIS_COMMUNES = [f"751{i:02d}" for i in range(1, 21)]   # 75101 … 75120
+# Années récupérées par défaut (timeline pluriannuelle pour le graphique des prix)
+DEFAULT_YEARS = list(range(2020, datetime.now().year + 1))
 
 # Colonnes CSV source lues (évite de charger les colonnes inutiles)
 CSV_USECOLS = [
@@ -152,6 +159,60 @@ def _clean_chunk(chunk: pd.DataFrame, ingested_at: datetime) -> pd.DataFrame:
     chunk["ingested_at"] = ingested_at
 
     return chunk[BRONZE_COLUMNS]
+
+
+# ---------------------------------------------------------------------------
+# Source automatisée — geo-dvf (téléchargement par commune)
+# ---------------------------------------------------------------------------
+
+def _ingest_geodvf(
+    years: list[int],
+    logger: logging.Logger,
+    ingested_at: datetime,
+) -> pd.DataFrame:
+    """
+    Télécharge les CSV geo-dvf par commune parisienne pour les années données.
+
+    1 fichier = 1 commune (arrondissement) × 1 année, déjà géocodé (lat/lon)
+    et au format propre (séparateur décimal « . »). Bien plus pratique que le
+    CSV national : pas de téléchargement manuel, ingestion 100 % automatisée.
+    """
+    import io
+
+    session = build_session(retries=3, backoff_factor=1.0, timeout=60)
+    frames: list[pd.DataFrame] = []
+    ok, missing = 0, 0
+
+    for year in years:
+        for insee in PARIS_COMMUNES:
+            url = f"{GEODVF_BASE}/{year}/communes/75/{insee}.csv"
+            try:
+                resp = session.get(url)
+                if resp.status_code == 404:
+                    missing += 1
+                    continue
+                if resp.status_code != 200 or not resp.content:
+                    logger.warning("geo-dvf %s/%s → HTTP %d", year, insee, resp.status_code)
+                    continue
+                raw = pd.read_csv(
+                    io.BytesIO(resp.content),
+                    usecols=CSV_USECOLS,
+                    dtype=CSV_DTYPE,
+                    low_memory=False,
+                )
+                cleaned = _clean_chunk(raw, ingested_at)
+                if not cleaned.empty:
+                    frames.append(cleaned)
+                    ok += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("geo-dvf %s/%s : échec — %s", year, insee, exc)
+
+    logger.info(
+        "geo-dvf : %d fichiers commune×année récupérés (%d absents/404)", ok, missing
+    )
+    if not frames:
+        return pd.DataFrame(columns=BRONZE_COLUMNS)
+    return pd.concat(frames, ignore_index=True)
 
 
 # ---------------------------------------------------------------------------
@@ -267,14 +328,30 @@ def ingest(
     logger = get_logger("dvf", LOG_DIR)
     source = Path(csv_path) if csv_path else CSV_PATH
 
-    if not source.exists():
-        raise FileNotFoundError(
-            f"Fichier DVF introuvable : {source}\n"
-            "Placez le CSV national DVF dans data/bronze/dvf/dvf.csv."
-        )
-
     ingested_at = datetime.now(timezone.utc)
     run_date = date.today().isoformat()
+
+    # --- Mode automatisé : si pas de CSV national local, télécharger geo-dvf ---
+    if not source.exists():
+        logger.info(
+            "Aucun CSV national local (%s) — bascule sur le téléchargement geo-dvf "
+            "(années %s)", source, DEFAULT_YEARS,
+        )
+        df = _ingest_geodvf(DEFAULT_YEARS, logger, ingested_at)
+
+        if postal_codes:
+            df = df[df["code_postal"].isin(postal_codes)]
+        if df.empty:
+            logger.warning("DVF geo-dvf : aucune transaction récupérée.")
+            return pd.DataFrame(columns=BRONZE_COLUMNS)
+
+        path = save_parquet(
+            df, source="dvf_clean",
+            partition_col="date", partition_value=run_date,
+            filename="part-0.parquet",
+        )
+        logger.info("DVF geo-dvf : %d transactions parisiennes → %s", len(df), path)
+        return df
 
     logger.info("DVF ingestion locale démarrée — source : %s", source)
     logger.info("Taille fichier : %.1f Mo", source.stat().st_size / 1_048_576)

@@ -1,0 +1,58 @@
+# ============================================================
+# Urban Data Explorer — stack complète (C1.4 : scalabilité & résilience)
+#   postgres (relationnel, Gold) + mongo (NoSQL, semi-structuré) + api
+# Lancement : docker compose up -d
+# ============================================================
+services:
+
+  postgres:
+    image: postgis/postgis:16-3.4        # PostGIS pour les géométries (sinon postgres:16)
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: urbandata
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d urbandata"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped              # résilience : redémarrage auto
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/urbandata
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: urbandata
+      API_KEYS: ${API_KEYS:-dev-key-123}
+      RATE_LIMIT: ${RATE_LIMIT:-120/minute}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy       # ne démarre qu'une fois PG prêt
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  mongo_data:

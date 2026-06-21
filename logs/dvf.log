@@ -293,3 +293,15 @@
 2026-05-21T14:00:36 [DEBUG] dvf —   Chunk 100 — lus : 20000000 | conservés Paris : 152135
 2026-05-21T14:00:37 [INFO] dvf — DVF ingestion : 20382915 lignes nationales lues → 189609 transactions parisiennes conservées
 2026-05-21T14:00:37 [INFO] dvf — Parquet sauvegardé → /home/beuhnny/Mast_DE/ProjetDataArchitect/Data_Architecture/data/bronze/dvf_clean/date=2026-05-21/part-0.parquet
+2026-06-21T12:19:27 [INFO] dvf — Aucun CSV national local (C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\dvf\dvf.csv) — bascule sur le téléchargement geo-dvf (années [2020, 2021, 2022, 2023, 2024, 2025, 2026])
+2026-06-21T12:19:53 [INFO] dvf — geo-dvf : 100 fichiers commune×année récupérés (40 absents/404)
+2026-06-21T12:19:53 [INFO] dvf — DVF geo-dvf : 189609 transactions parisiennes → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\dvf_clean\date=2026-06-21\part-0.parquet
+2026-06-21T12:22:36 [INFO] dvf — Aucun CSV national local (C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\dvf\dvf.csv) — bascule sur le téléchargement geo-dvf (années [2020, 2021, 2022, 2023, 2024, 2025, 2026])
+2026-06-21T12:23:03 [INFO] dvf — geo-dvf : 100 fichiers commune×année récupérés (40 absents/404)
+2026-06-21T12:23:04 [INFO] dvf — DVF geo-dvf : 189609 transactions parisiennes → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\dvf_clean\date=2026-06-21\part-0.parquet
+2026-06-21T12:41:54 [INFO] dvf — Aucun CSV national local (C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\dvf\dvf.csv) — bascule sur le téléchargement geo-dvf (années [2020, 2021, 2022, 2023, 2024, 2025, 2026])
+2026-06-21T12:42:20 [INFO] dvf — geo-dvf : 100 fichiers commune×année récupérés (40 absents/404)
+2026-06-21T12:42:20 [INFO] dvf — DVF geo-dvf : 189609 transactions parisiennes → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\dvf_clean\date=2026-06-21\part-0.parquet
+2026-06-21T13:27:37 [INFO] dvf — Aucun CSV national local (C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\dvf\dvf.csv) — bascule sur le téléchargement geo-dvf (années [2020, 2021, 2022, 2023, 2024, 2025, 2026])
+2026-06-21T13:28:06 [INFO] dvf — geo-dvf : 100 fichiers commune×année récupérés (40 absents/404)
+2026-06-21T13:28:07 [INFO] dvf — DVF geo-dvf : 189609 transactions parisiennes → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\dvf_clean\date=2026-06-21\part-0.parquet

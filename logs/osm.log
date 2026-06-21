@@ -485,3 +485,167 @@ out center tags;
 2026-05-21T14:11:25 [INFO] osm —   Overpass returned 98 elements for 'university'
 2026-05-21T14:11:25 [INFO] osm —   Saved 98 rows → /home/beuhnny/Mast_DE/ProjetDataArchitect/Data_Architecture/data/bronze/osm/amenity_type=university/part-0.parquet
 2026-05-21T14:11:25 [INFO] osm — OSM ingestion complete — 15823 total rows
+2026-06-21T12:08:47 [INFO] osm — OSM ingestion started — amenity_types=['bar', 'cinema', 'college', 'nightclub', 'park', 'restaurant', 'school', 'shop', 'stadium', 'university']
+2026-06-21T12:08:47 [INFO] osm —   Fetching 'bar' (filter: amenity="bar")
+2026-06-21T12:08:47 [DEBUG] osm — Overpass query for 'bar':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="bar"](area.paris);
+  way[amenity="bar"](area.paris);
+);
+out center tags;
+2026-06-21T12:23:04 [INFO] osm — OSM ingestion started — amenity_types=['bar', 'cinema', 'college', 'nightclub', 'park', 'restaurant', 'school', 'shop', 'stadium', 'university']
+2026-06-21T12:23:04 [INFO] osm —   Fetching 'bar' (filter: amenity="bar")
+2026-06-21T12:23:04 [DEBUG] osm — Overpass query for 'bar':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="bar"](area.paris);
+  way[amenity="bar"](area.paris);
+);
+out center tags;
+2026-06-21T12:24:28 [INFO] osm —   Overpass returned 1786 elements for 'bar'
+2026-06-21T12:24:28 [INFO] osm —   Saved 1786 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=bar\part-0.parquet
+2026-06-21T12:24:28 [INFO] osm —   Fetching 'cinema' (filter: amenity="cinema")
+2026-06-21T12:24:28 [DEBUG] osm — Overpass query for 'cinema':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="cinema"](area.paris);
+  way[amenity="cinema"](area.paris);
+);
+out center tags;
+2026-06-21T12:42:20 [INFO] osm — OSM ingestion started — amenity_types=['bar', 'cinema', 'college', 'nightclub', 'park', 'restaurant', 'school', 'shop', 'stadium', 'university']
+2026-06-21T12:42:20 [INFO] osm —   Fetching 'bar' (filter: amenity="bar")
+2026-06-21T12:42:20 [DEBUG] osm — Overpass query for 'bar':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="bar"](area.paris);
+  way[amenity="bar"](area.paris);
+);
+out center tags;
+2026-06-21T12:44:47 [INFO] osm —   Overpass returned 1786 elements for 'bar'
+2026-06-21T12:44:47 [INFO] osm —   Saved 1786 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=bar\part-0.parquet
+2026-06-21T12:44:47 [INFO] osm —   Fetching 'cinema' (filter: amenity="cinema")
+2026-06-21T12:44:47 [DEBUG] osm — Overpass query for 'cinema':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="cinema"](area.paris);
+  way[amenity="cinema"](area.paris);
+);
+out center tags;
+2026-06-21T12:45:10 [INFO] osm —   Overpass returned 89 elements for 'cinema'
+2026-06-21T12:45:10 [INFO] osm —   Saved 89 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=cinema\part-0.parquet
+2026-06-21T12:45:10 [INFO] osm —   Fetching 'college' (filter: amenity="college")
+2026-06-21T12:45:10 [DEBUG] osm — Overpass query for 'college':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="college"](area.paris);
+  way[amenity="college"](area.paris);
+);
+out center tags;
+2026-06-21T12:45:50 [INFO] osm —   Overpass returned 295 elements for 'college'
+2026-06-21T12:45:50 [INFO] osm —   Saved 295 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=college\part-0.parquet
+2026-06-21T12:45:50 [INFO] osm —   Fetching 'nightclub' (filter: amenity="nightclub")
+2026-06-21T12:45:50 [DEBUG] osm — Overpass query for 'nightclub':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="nightclub"](area.paris);
+  way[amenity="nightclub"](area.paris);
+);
+out center tags;
+2026-06-21T12:47:24 [INFO] osm —   Overpass returned 79 elements for 'nightclub'
+2026-06-21T12:47:24 [INFO] osm —   Saved 79 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=nightclub\part-0.parquet
+2026-06-21T12:47:24 [INFO] osm —   Fetching 'park' (filter: leisure="park")
+2026-06-21T12:47:24 [DEBUG] osm — Overpass query for 'park':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[leisure="park"](area.paris);
+  way[leisure="park"](area.paris);
+);
+out center tags;
+2026-06-21T12:50:16 [INFO] osm —   Overpass returned 729 elements for 'park'
+2026-06-21T12:50:16 [INFO] osm —   Saved 729 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=park\part-0.parquet
+2026-06-21T12:50:16 [INFO] osm —   Fetching 'restaurant' (filter: amenity="restaurant")
+2026-06-21T12:50:16 [DEBUG] osm — Overpass query for 'restaurant':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="restaurant"](area.paris);
+  way[amenity="restaurant"](area.paris);
+);
+out center tags;
+2026-06-21T12:50:56 [INFO] osm —   Overpass returned 8958 elements for 'restaurant'
+2026-06-21T12:50:56 [INFO] osm —   Saved 8958 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=restaurant\part-0.parquet
+2026-06-21T12:50:56 [INFO] osm —   Fetching 'school' (filter: amenity="school")
+2026-06-21T12:50:56 [DEBUG] osm — Overpass query for 'school':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="school"](area.paris);
+  way[amenity="school"](area.paris);
+);
+out center tags;
+2026-06-21T12:51:32 [INFO] osm —   Overpass returned 1292 elements for 'school'
+2026-06-21T12:51:32 [INFO] osm —   Saved 1292 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=school\part-0.parquet
+2026-06-21T12:51:32 [INFO] osm —   Fetching 'shop' (filter: shop~"supermarket|hypermarket|convenience|grocery|department_store|mall")
+2026-06-21T12:51:32 [DEBUG] osm — Overpass query for 'shop':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[shop~"supermarket|hypermarket|convenience|grocery|department_store|mall"](area.paris);
+  way[shop~"supermarket|hypermarket|convenience|grocery|department_store|mall"](area.paris);
+);
+out center tags;
+2026-06-21T12:55:24 [INFO] osm —   Overpass returned 2511 elements for 'shop'
+2026-06-21T12:55:24 [INFO] osm —   Saved 2511 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=shop\part-0.parquet
+2026-06-21T12:55:24 [INFO] osm —   Fetching 'stadium' (filter: leisure="stadium")
+2026-06-21T12:55:24 [DEBUG] osm — Overpass query for 'stadium':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[leisure="stadium"](area.paris);
+  way[leisure="stadium"](area.paris);
+);
+out center tags;
+2026-06-21T12:56:10 [INFO] osm —   Overpass returned 12 elements for 'stadium'
+2026-06-21T12:56:10 [INFO] osm —   Saved 12 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=stadium\part-0.parquet
+2026-06-21T12:56:10 [INFO] osm —   Fetching 'university' (filter: amenity="university")
+2026-06-21T12:56:10 [DEBUG] osm — Overpass query for 'university':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="university"](area.paris);
+  way[amenity="university"](area.paris);
+);
+out center tags;
+2026-06-21T12:57:00 [INFO] osm —   Overpass returned 98 elements for 'university'
+2026-06-21T12:57:00 [INFO] osm —   Saved 98 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=university\part-0.parquet
+2026-06-21T12:57:00 [INFO] osm — OSM ingestion complete — 15849 total rows
+2026-06-21T13:28:07 [INFO] osm — OSM ingestion started — amenity_types=['bar', 'cinema', 'college', 'nightclub', 'park', 'restaurant', 'school', 'shop', 'stadium', 'university']
+2026-06-21T13:28:07 [INFO] osm —   Fetching 'bar' (filter: amenity="bar")
+2026-06-21T13:28:07 [DEBUG] osm — Overpass query for 'bar':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="bar"](area.paris);
+  way[amenity="bar"](area.paris);
+);
+out center tags;
+2026-06-21T13:32:46 [INFO] osm —   Overpass returned 1800 elements for 'bar'
+2026-06-21T13:32:46 [INFO] osm —   Saved 1800 rows → C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\osm\amenity_type=bar\part-0.parquet
+2026-06-21T13:32:46 [INFO] osm —   Fetching 'cinema' (filter: amenity="cinema")
+2026-06-21T13:32:46 [DEBUG] osm — Overpass query for 'cinema':
+[out:json][timeout:120];
+area["name"="Paris"]["admin_level"="8"]->.paris;
+(
+  node[amenity="cinema"](area.paris);
+  way[amenity="cinema"](area.paris);
+);
+out center tags;

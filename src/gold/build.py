@@ -308,6 +308,20 @@ def build_price_timeline(logger: logging.Logger) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Table 5 — Social Housing Timeline (évolution du parc social)
+# ---------------------------------------------------------------------------
+
+def build_social_housing_timeline(logger: logging.Logger) -> pd.DataFrame:
+    """Série temporelle du parc social par arrondissement × année (Silver → Gold)."""
+    df = _read_silver("social_housing_by_year.parquet", logger)
+    if df.empty:
+        logger.warning("social_housing_by_year.parquet absent")
+        return pd.DataFrame()
+    keep = ["arrondissement", "annee", "logements_finances", "logements_cumules"]
+    return df[[c for c in keep if c in df.columns]].copy()
+
+
+# ---------------------------------------------------------------------------
 # Orchestrateur principal
 # ---------------------------------------------------------------------------
 
@@ -337,11 +351,17 @@ def build_gold_layer() -> None:
         _save_gold(poi, "poi_catalog.parquet", logger)
 
     # Série temporelle prix
-    logger.info(">>> Table 4/4 : price_timeline")
+    logger.info(">>> Table 4/5 : price_timeline")
     timeline = build_price_timeline(logger)
     if not timeline.empty:
         _save_gold(timeline, "price_timeline.parquet", logger)
 
+    # Série temporelle logements sociaux
+    logger.info(">>> Table 5/5 : social_housing_timeline")
+    sh_timeline = build_social_housing_timeline(logger)
+    if not sh_timeline.empty:
+        _save_gold(sh_timeline, "social_housing_timeline.parquet", logger)
+
     logger.info("=" * 60)
-    logger.info("Gold layer complet — %d tables", 4)
+    logger.info("Gold layer complet — %d tables", 5)
     logger.info("=" * 60)

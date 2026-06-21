@@ -95,7 +95,8 @@ PARIS_OD_CATALOG = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets"
 
 # Codes INSEE Paris
 _PARIS_CODES = {f"751{str(i).zfill(2)}" for i in range(1, 21)}
-ILOTS_DATASET = "ilots-de-fraicheur-espaces-verts-ouverts-au-public"
+# Slug renommé par Paris OD (l'ancien "...ouverts-au-public" renvoie 404)
+ILOTS_DATASET = "ilots-de-fraicheur-espaces-verts-frais"
 ARBRES_DATASET = "les-arbres"
 
 # Limite de récupération des arbres (dataset ~200k lignes — Bronze allégé)
@@ -409,10 +410,18 @@ def _fetch_ilots_fraicheur(
         geo_pt = r.get("geo_point_2d") or r.get("geometry_point") or {}
         lat, lon = _extract_coords(geo_pt)
 
-        arr_raw = r.get("arrondissement", r.get("arr", ""))
-        arr = _parse_arrondissement(str(arr_raw)) if arr_raw else None
+        arr_raw = str(r.get("arrondissement", r.get("arr", "")) or "")
+        arr = _parse_arrondissement(arr_raw) if arr_raw else None
 
-        # Fallback arrondissement depuis le code postal ou l'adresse
+        # Nouveau format Paris OD : arrondissement = code 5 chiffres
+        # "750XX" (type code postal) ou "751XX" (code INSEE) → 2 derniers chiffres
+        if arr is None and len(arr_raw) == 5 and arr_raw.startswith("75"):
+            try:
+                arr = int(arr_raw[-2:]) or None
+            except ValueError:
+                pass
+
+        # Fallback arrondissement depuis le code postal
         if arr is None:
             cp = str(r.get("code_postal", "") or "")
             if cp.startswith("750") and len(cp) == 5:
@@ -421,9 +430,15 @@ def _fetch_ilots_fraicheur(
                 except ValueError:
                     pass
 
+        # Surface : champ direct sinon surface végétalisée 2024 (m² → ha)
         surface_raw = r.get("surface", r.get("surface_ha", r.get("hectares", None)))
         try:
-            surface_ha = float(surface_raw) if surface_raw is not None else float("nan")
+            if surface_raw is not None:
+                surface_ha = float(surface_raw)
+            elif r.get("surf_veget_sup8m_2024") is not None:
+                surface_ha = float(r["surf_veget_sup8m_2024"]) / 10_000.0
+            else:
+                surface_ha = float("nan")
         except (ValueError, TypeError):
             surface_ha = float("nan")
 

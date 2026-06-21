@@ -2,7 +2,7 @@
 .env
 .env.*
 !.env.example
-
+*.env.example
 # --- Python ---
 *__pycache__/
 *.py[cod]
@@ -42,3 +42,5 @@ logs/*.log
 # --- OS ---
 .DS_Store
 Thumbs.db
+
+log/

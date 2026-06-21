@@ -5,6 +5,8 @@
  */
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
+// Clé d'API optionnelle : envoyée si VITE_API_KEY est défini (auth backend activée).
+const API_KEY = import.meta.env.VITE_API_KEY ?? '';
 
 async function get(path, params = {}) {
   const url = new URL(BASE + path, window.location.origin);
@@ -12,7 +14,10 @@ async function get(path, params = {}) {
     if (v != null) url.searchParams.set(k, String(v));
   });
 
-  const res = await fetch(url.toString());
+  const headers = API_KEY ? { 'X-API-Key': API_KEY } : undefined;
+  // no-store : empêche le navigateur de resservir une vieille réponse en cache
+  // (évite l'affichage de scores périmés après un rebuild du pipeline).
+  const res = await fetch(url.toString(), { headers, cache: 'no-store' });
   if (!res.ok) {
     const detail = await res.text().catch(() => res.statusText);
     throw new Error(`[${res.status}] ${path} — ${detail}`);
@@ -66,6 +71,11 @@ export const api = {
   connectivity: {
     /** GET /api/connectivity/{n}/operators → {operators[], ftth_pct, best_4g, best_5g} */
     operators: (n) => get(`/api/connectivity/${n}/operators`),
+  },
+
+  socialHousing: {
+    /** GET /api/social-housing/timeline → SocialHousingPoint[] (évolution du parc social) */
+    timeline: (arrondissement) => get('/api/social-housing/timeline', { arrondissement }),
   },
 
   /** GET /health → HealthCheckExtended */

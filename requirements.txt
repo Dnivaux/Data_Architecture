@@ -30,5 +30,11 @@ sqlalchemy>=2.0
 psycopg2-binary>=2.9        # driver PostgreSQL (binaire, sans compilation)
 # geoalchemy2>=0.14          # décommenter si PostGIS est installé (géométries natives)
 
+# --- Sécurité API : quotas / rate limiting (C2.1) ---
+slowapi>=0.1.9
+
+# --- NoSQL document store (C1.2) — MongoDB ---
+pymongo>=4.6
+
 # --- Tests de charge (Locust) ---
 locust>=2.20

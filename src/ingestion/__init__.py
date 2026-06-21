@@ -1,7 +1,9 @@
 from .dvf import ingest as ingest_dvf
 from .osm import ingest as ingest_osm
 from .revenus import ingest as ingest_revenus
-from .air_quality import ingest as ingest_air_quality
+# Qualité de l'air : Open-Meteo (gratuit, sans clé, + pollen) remplace Airparif.
+# L'ancien module Airparif reste disponible via `from .air_quality import ingest`.
+from .open_meteo_air import ingest as ingest_air_quality
 from .crime import ingest as ingest_crime
 from .boundaries import ingest as ingest_boundaries
 

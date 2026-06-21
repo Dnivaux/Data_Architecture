@@ -7,7 +7,9 @@ export const INDICATOR_OPTIONS = [
   { id: 'health_env_score',   label: 'Santé Environnementale',icon: 'eco', desc: 'Végétalisation, air pur, îlots de fraîcheur' },
   { id: 'tranquility_score',  label: 'Tranquillité',          icon: 'shield', desc: 'Sécurité, peu de dynamisme nocturne' },
   { id: 'anime_score',        label: 'Dynamisme du quartier', icon: 'theater_comedy' },
-  { id: 'calme_score',        label: 'Calme',                 icon: 'volume_off', desc: 'Absence de bruit (Lden)' },
+  // « Calme » retiré : fusionné dans « Tranquillité » (scoring v2). calme_score est volontairement nul.
+  { id: 'european_aqi',       label: "Qualité de l'air",      icon: 'air',  desc: 'Indice européen AQI (Open-Meteo / CAMS)' },
+  { id: 'pollen_total',       label: 'Pollen',                icon: 'grass', desc: 'Pic pollinique journalier (Open-Meteo)' },
   { id: 'median_price',       label: 'Prix m² médian',        icon: 'payments' },
 ];
 

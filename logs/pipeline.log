@@ -321,3 +321,424 @@ requests.exceptions.ConnectionError: HTTPSConnectionPool(host='overpass.private.
 2026-05-21T14:11:27 [INFO] pipeline — ✓ air_quality   OK — 40 rows (0.2s)
 2026-05-21T14:11:27 [INFO] pipeline — ✓ crime         OK — 3,000 rows (1.5s)
 2026-05-21T14:11:27 [INFO] pipeline — ============================================================
+2026-06-21T12:08:47 [INFO] pipeline — ============================================================
+2026-06-21T12:08:47 [INFO] pipeline — Bronze pipeline started at 2026-06-21T10:08:47.850583+00:00
+2026-06-21T12:08:47 [INFO] pipeline — Sources: ['dvf', 'osm', 'boundaries', 'revenus', 'air_quality', 'crime']
+2026-06-21T12:08:47 [INFO] pipeline — ============================================================
+2026-06-21T12:08:47 [INFO] pipeline — 
+>>> Running: DVF
+2026-06-21T12:08:47 [ERROR] pipeline — <<< DVF FAILED after 0.0s
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\main.py", line 141, in run_pipeline
+    df = task_map[source]()
+         ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\main.py", line 57, in dvf
+    return ingest_dvf(date_min=args.date_min, date_max=args.date_max)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\src\ingestion\dvf.py", line 271, in ingest
+    raise FileNotFoundError(
+FileNotFoundError: Fichier DVF introuvable : C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\dvf\dvf.csv
+Placez le CSV national DVF dans data/bronze/dvf/dvf.csv.
+2026-06-21T12:08:47 [INFO] pipeline — 
+>>> Running: OSM
+2026-06-21T12:16:03 [ERROR] pipeline — <<< OSM FAILED after 436.0s
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connection.py", line 571, in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\http\client.py", line 1428, in getresponse
+    response.begin()
+  File "C:\Python312\Lib\http\client.py", line 331, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\http\client.py", line 292, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\socket.py", line 720, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\ssl.py", line 1251, in recv_into
+    return self.read(nbytes, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\ssl.py", line 1103, in read
+    return self._sslobj.read(len, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+               ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 536, in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 367, in _raise_timeout
+    raise ReadTimeoutError(
+urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\adapters.py", line 645, in send
+    resp = conn.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 955, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 955, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 955, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+              ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\util\retry.py", line 543, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Max retries exceeded with url: /api/interpreter (Caused by ReadTimeoutError("HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)"))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\main.py", line 141, in run_pipeline
+    df = task_map[source]()
+         ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\main.py", line 60, in osm
+    return ingest_osm()
+           ^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\src\ingestion\osm.py", line 213, in ingest
+    elements = _fetch_amenity(session, logger, amenity_type, tag_filter)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\src\ingestion\osm.py", line 116, in _fetch_amenity
+    resp = session.post(url, data={"data": query}, headers=headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\sessions.py", line 640, in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\src\ingestion\base.py", line 79, in wrapper
+    return original_request(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\sessions.py", line 592, in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\sessions.py", line 706, in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\adapters.py", line 678, in send
+    raise ConnectionError(e, request=request)
+requests.exceptions.ConnectionError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Max retries exceeded with url: /api/interpreter (Caused by ReadTimeoutError("HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)"))
+2026-06-21T12:16:04 [INFO] pipeline — 
+>>> Running: BOUNDARIES
+2026-06-21T12:16:04 [INFO] pipeline — <<< BOUNDARIES done: 20 rows in 0.8s
+2026-06-21T12:16:04 [INFO] pipeline — 
+>>> Running: REVENUS
+2026-06-21T12:16:05 [INFO] pipeline — <<< REVENUS done: 992 rows in 0.9s
+2026-06-21T12:16:05 [INFO] pipeline — 
+>>> Running: AIR_QUALITY
+2026-06-21T12:16:06 [INFO] pipeline — <<< AIR_QUALITY done: 20 rows in 0.9s
+2026-06-21T12:16:06 [INFO] pipeline — 
+>>> Running: CRIME
+2026-06-21T12:16:10 [INFO] pipeline — <<< CRIME done: 3000 rows in 3.5s
+2026-06-21T12:16:10 [INFO] pipeline — 
+============================================================
+2026-06-21T12:16:10 [INFO] pipeline — Pipeline finished at 2026-06-21T10:16:10.115072+00:00 (442.3s total)
+2026-06-21T12:16:10 [INFO] pipeline — SOURCE          RESULT
+2026-06-21T12:16:10 [INFO] pipeline — ------------------------------------------------------------
+2026-06-21T12:16:10 [INFO] pipeline — ✗ dvf           FAILED — FileNotFoundError: Fichier DVF introuvable : C:\Users\DNivaux\Documents\efrei\Data_Architecture\data\bronze\dvf\dvf.csv
+Placez le CSV national DVF dans data/bronze/dvf/dvf.csv.
+2026-06-21T12:16:10 [INFO] pipeline — ✗ osm           FAILED — ConnectionError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Max retries exceeded with url: /api/interpreter (Caused by ReadTimeoutError("HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)"))
+2026-06-21T12:16:10 [INFO] pipeline — ✓ boundaries    OK — 20 rows (0.8s)
+2026-06-21T12:16:10 [INFO] pipeline — ✓ revenus       OK — 992 rows (0.9s)
+2026-06-21T12:16:10 [INFO] pipeline — ✓ air_quality   OK — 20 rows (0.9s)
+2026-06-21T12:16:10 [INFO] pipeline — ✓ crime         OK — 3,000 rows (3.5s)
+2026-06-21T12:16:10 [INFO] pipeline — ============================================================
+2026-06-21T12:22:36 [INFO] pipeline — ============================================================
+2026-06-21T12:22:36 [INFO] pipeline — Bronze pipeline started at 2026-06-21T10:22:36.284879+00:00
+2026-06-21T12:22:36 [INFO] pipeline — Sources: ['dvf', 'osm', 'boundaries', 'revenus', 'air_quality', 'crime']
+2026-06-21T12:22:36 [INFO] pipeline — ============================================================
+2026-06-21T12:22:36 [INFO] pipeline — 
+>>> Running: DVF
+2026-06-21T12:23:04 [INFO] pipeline — <<< DVF done: 189609 rows in 27.9s
+2026-06-21T12:23:04 [INFO] pipeline — 
+>>> Running: OSM
+2026-06-21T12:32:41 [ERROR] pipeline — <<< OSM FAILED after 577.1s
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connection.py", line 571, in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\http\client.py", line 1428, in getresponse
+    response.begin()
+  File "C:\Python312\Lib\http\client.py", line 331, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\http\client.py", line 292, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\socket.py", line 720, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\ssl.py", line 1251, in recv_into
+    return self.read(nbytes, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\ssl.py", line 1103, in read
+    return self._sslobj.read(len, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+               ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 536, in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 367, in _raise_timeout
+    raise ReadTimeoutError(
+urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\adapters.py", line 645, in send
+    resp = conn.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 872, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 872, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 872, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+              ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\util\retry.py", line 543, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Max retries exceeded with url: /api/interpreter (Caused by ReadTimeoutError("HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)"))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\main.py", line 141, in run_pipeline
+    df = task_map[source]()
+         ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\main.py", line 60, in osm
+    return ingest_osm()
+           ^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\src\ingestion\osm.py", line 213, in ingest
+    elements = _fetch_amenity(session, logger, amenity_type, tag_filter)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\src\ingestion\osm.py", line 116, in _fetch_amenity
+    resp = session.post(url, data={"data": query}, headers=headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\sessions.py", line 640, in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\src\ingestion\base.py", line 79, in wrapper
+    return original_request(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\sessions.py", line 592, in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\sessions.py", line 706, in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\adapters.py", line 678, in send
+    raise ConnectionError(e, request=request)
+requests.exceptions.ConnectionError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Max retries exceeded with url: /api/interpreter (Caused by ReadTimeoutError("HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)"))
+2026-06-21T12:32:41 [INFO] pipeline — 
+>>> Running: BOUNDARIES
+2026-06-21T12:32:41 [INFO] pipeline — <<< BOUNDARIES done: 20 rows in 0.4s
+2026-06-21T12:32:41 [INFO] pipeline — 
+>>> Running: REVENUS
+2026-06-21T12:32:42 [INFO] pipeline — <<< REVENUS done: 992 rows in 0.9s
+2026-06-21T12:32:42 [INFO] pipeline — 
+>>> Running: AIR_QUALITY
+2026-06-21T12:32:43 [INFO] pipeline — <<< AIR_QUALITY done: 20 rows in 0.8s
+2026-06-21T12:32:43 [INFO] pipeline — 
+>>> Running: CRIME
+2026-06-21T12:32:46 [INFO] pipeline — <<< CRIME done: 3000 rows in 3.1s
+2026-06-21T12:32:46 [INFO] pipeline — 
+============================================================
+2026-06-21T12:32:46 [INFO] pipeline — Pipeline finished at 2026-06-21T10:32:46.461537+00:00 (610.2s total)
+2026-06-21T12:32:46 [INFO] pipeline — SOURCE          RESULT
+2026-06-21T12:32:46 [INFO] pipeline — ------------------------------------------------------------
+2026-06-21T12:32:46 [INFO] pipeline — ✓ dvf           OK — 189,609 rows (27.9s)
+2026-06-21T12:32:46 [INFO] pipeline — ✗ osm           FAILED — ConnectionError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Max retries exceeded with url: /api/interpreter (Caused by ReadTimeoutError("HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)"))
+2026-06-21T12:32:46 [INFO] pipeline — ✓ boundaries    OK — 20 rows (0.4s)
+2026-06-21T12:32:46 [INFO] pipeline — ✓ revenus       OK — 992 rows (0.9s)
+2026-06-21T12:32:46 [INFO] pipeline — ✓ air_quality   OK — 20 rows (0.8s)
+2026-06-21T12:32:46 [INFO] pipeline — ✓ crime         OK — 3,000 rows (3.1s)
+2026-06-21T12:32:46 [INFO] pipeline — ============================================================
+2026-06-21T12:41:54 [INFO] pipeline — ============================================================
+2026-06-21T12:41:54 [INFO] pipeline — Bronze pipeline started at 2026-06-21T10:41:54.685677+00:00
+2026-06-21T12:41:54 [INFO] pipeline — Sources: ['dvf', 'osm', 'boundaries', 'revenus', 'air_quality', 'crime']
+2026-06-21T12:41:54 [INFO] pipeline — ============================================================
+2026-06-21T12:41:54 [INFO] pipeline — 
+>>> Running: DVF
+2026-06-21T12:42:20 [INFO] pipeline — <<< DVF done: 189609 rows in 26.2s
+2026-06-21T12:42:20 [INFO] pipeline — 
+>>> Running: OSM
+2026-06-21T12:57:00 [INFO] pipeline — <<< OSM done: 15849 rows in 880.0s
+2026-06-21T12:57:00 [INFO] pipeline — 
+>>> Running: BOUNDARIES
+2026-06-21T12:57:01 [INFO] pipeline — <<< BOUNDARIES done: 20 rows in 0.4s
+2026-06-21T12:57:01 [INFO] pipeline — 
+>>> Running: REVENUS
+2026-06-21T12:57:02 [INFO] pipeline — <<< REVENUS done: 992 rows in 0.8s
+2026-06-21T12:57:02 [INFO] pipeline — 
+>>> Running: AIR_QUALITY
+2026-06-21T12:57:03 [INFO] pipeline — <<< AIR_QUALITY done: 20 rows in 0.8s
+2026-06-21T12:57:03 [INFO] pipeline — 
+>>> Running: CRIME
+2026-06-21T12:57:06 [INFO] pipeline — <<< CRIME done: 3000 rows in 3.1s
+2026-06-21T12:57:06 [INFO] pipeline — 
+============================================================
+2026-06-21T12:57:06 [INFO] pipeline — Pipeline finished at 2026-06-21T10:57:06.093809+00:00 (911.4s total)
+2026-06-21T12:57:06 [INFO] pipeline — SOURCE          RESULT
+2026-06-21T12:57:06 [INFO] pipeline — ------------------------------------------------------------
+2026-06-21T12:57:06 [INFO] pipeline — ✓ dvf           OK — 189,609 rows (26.2s)
+2026-06-21T12:57:06 [INFO] pipeline — ✓ osm           OK — 15,849 rows (880.0s)
+2026-06-21T12:57:06 [INFO] pipeline — ✓ boundaries    OK — 20 rows (0.4s)
+2026-06-21T12:57:06 [INFO] pipeline — ✓ revenus       OK — 992 rows (0.8s)
+2026-06-21T12:57:06 [INFO] pipeline — ✓ air_quality   OK — 20 rows (0.8s)
+2026-06-21T12:57:06 [INFO] pipeline — ✓ crime         OK — 3,000 rows (3.1s)
+2026-06-21T12:57:06 [INFO] pipeline — ============================================================
+2026-06-21T13:27:37 [INFO] pipeline — ============================================================
+2026-06-21T13:27:37 [INFO] pipeline — Bronze pipeline started at 2026-06-21T11:27:37.830368+00:00
+2026-06-21T13:27:37 [INFO] pipeline — Sources: ['dvf', 'osm', 'boundaries', 'revenus', 'air_quality', 'crime']
+2026-06-21T13:27:37 [INFO] pipeline — ============================================================
+2026-06-21T13:27:37 [INFO] pipeline — 
+>>> Running: DVF
+2026-06-21T13:28:07 [INFO] pipeline — <<< DVF done: 189609 rows in 29.4s
+2026-06-21T13:28:07 [INFO] pipeline — 
+>>> Running: OSM
+2026-06-21T13:39:02 [ERROR] pipeline — <<< OSM FAILED after 655.6s
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connection.py", line 571, in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\http\client.py", line 1428, in getresponse
+    response.begin()
+  File "C:\Python312\Lib\http\client.py", line 331, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\http\client.py", line 292, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\socket.py", line 720, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\ssl.py", line 1251, in recv_into
+    return self.read(nbytes, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python312\Lib\ssl.py", line 1103, in read
+    return self._sslobj.read(len, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+               ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 536, in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 367, in _raise_timeout
+    raise ReadTimeoutError(
+urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\adapters.py", line 645, in send
+    resp = conn.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 872, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 955, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 955, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+              ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\urllib3\util\retry.py", line 543, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Max retries exceeded with url: /api/interpreter (Caused by ReadTimeoutError("HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)"))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\main.py", line 141, in run_pipeline
+    df = task_map[source]()
+         ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\main.py", line 60, in osm
+    return ingest_osm()
+           ^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\src\ingestion\osm.py", line 213, in ingest
+    elements = _fetch_amenity(session, logger, amenity_type, tag_filter)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\src\ingestion\osm.py", line 116, in _fetch_amenity
+    resp = session.post(url, data={"data": query}, headers=headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\sessions.py", line 640, in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\Documents\efrei\Data_Architecture\src\ingestion\base.py", line 79, in wrapper
+    return original_request(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\sessions.py", line 592, in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\sessions.py", line 706, in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DNivaux\AppData\Roaming\Python\Python312\site-packages\requests\adapters.py", line 678, in send
+    raise ConnectionError(e, request=request)
+requests.exceptions.ConnectionError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Max retries exceeded with url: /api/interpreter (Caused by ReadTimeoutError("HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)"))
+2026-06-21T13:39:02 [INFO] pipeline — 
+>>> Running: BOUNDARIES
+2026-06-21T13:39:03 [INFO] pipeline — <<< BOUNDARIES done: 20 rows in 0.6s
+2026-06-21T13:39:03 [INFO] pipeline — 
+>>> Running: REVENUS
+2026-06-21T13:39:04 [INFO] pipeline — <<< REVENUS done: 992 rows in 1.0s
+2026-06-21T13:39:04 [INFO] pipeline — 
+>>> Running: AIR_QUALITY
+2026-06-21T13:39:05 [INFO] pipeline — <<< AIR_QUALITY done: 20 rows in 1.4s
+2026-06-21T13:39:05 [INFO] pipeline — 
+>>> Running: CRIME
+2026-06-21T13:39:09 [INFO] pipeline — <<< CRIME done: 3000 rows in 3.9s
+2026-06-21T13:39:09 [INFO] pipeline — 
+============================================================
+2026-06-21T13:39:09 [INFO] pipeline — Pipeline finished at 2026-06-21T11:39:09.690073+00:00 (691.9s total)
+2026-06-21T13:39:09 [INFO] pipeline — SOURCE          RESULT
+2026-06-21T13:39:09 [INFO] pipeline — ------------------------------------------------------------
+2026-06-21T13:39:09 [INFO] pipeline — ✓ dvf           OK — 189,609 rows (29.4s)
+2026-06-21T13:39:09 [INFO] pipeline — ✗ osm           FAILED — ConnectionError: HTTPSConnectionPool(host='overpass.private.coffee', port=443): Max retries exceeded with url: /api/interpreter (Caused by ReadTimeoutError("HTTPSConnectionPool(host='overpass.private.coffee', port=443): Read timed out. (read timeout=120)"))
+2026-06-21T13:39:09 [INFO] pipeline — ✓ boundaries    OK — 20 rows (0.6s)
+2026-06-21T13:39:09 [INFO] pipeline — ✓ revenus       OK — 992 rows (1.0s)
+2026-06-21T13:39:09 [INFO] pipeline — ✓ air_quality   OK — 20 rows (1.4s)
+2026-06-21T13:39:09 [INFO] pipeline — ✓ crime         OK — 3,000 rows (3.9s)
+2026-06-21T13:39:09 [INFO] pipeline — ============================================================

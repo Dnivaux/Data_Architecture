@@ -92,9 +92,10 @@ ARCEP_FIBRE_FALLBACK = (
     "8d5a3498-8f44-49e0-9e08-18475f5fe2b0"
 )
 
-# INSEE RP2020 logements par commune — ZIP contenant un CSV national
+# INSEE RP2021 « base infracommunale Logement » — ZIP contenant un CSV IRIS.
+# (L'ancien node 7705897 / RP2020 renvoie désormais 404.)
 INSEE_LOGCOM_URL = (
-    "https://www.insee.fr/fr/statistiques/fichier/7705897/RP2020_logcom_csv.zip"
+    "https://www.insee.fr/fr/statistiques/fichier/8268838/base-ic-logement-2021_csv.zip"
 )
 
 PARIS_CODES = {f"751{str(i).zfill(2)}" for i in range(1, 21)}
@@ -208,13 +209,16 @@ def _bytes_to_df(raw: bytes, logger: Any) -> pd.DataFrame:
             with zipfile.ZipFile(io.BytesIO(raw)) as zf:
                 csvs = [n for n in zf.namelist() if n.lower().endswith(".csv")]
                 if csvs:
-                    with zf.open(csvs[0]) as f:
-                        logger.debug("ZIP → CSV '%s'", csvs[0])
-                        for enc in ("utf-8", "latin-1", "utf-8-sig"):
+                    logger.debug("ZIP → CSV '%s'", csvs[0])
+                    for enc in ("utf-8", "latin-1", "utf-8-sig"):
+                        for sep in (";", ",", "\t"):
                             try:
-                                return pd.read_csv(f, sep=None, engine="python", encoding=enc, low_memory=False)
-                            except UnicodeDecodeError:
-                                f.seek(0)
+                                with zf.open(csvs[0]) as f:
+                                    df = pd.read_csv(f, sep=sep, encoding=enc, low_memory=False)
+                                if df.shape[1] > 1:   # séparateur correct trouvé
+                                    return df
+                            except (UnicodeDecodeError, Exception):
+                                continue
                 parquets = [n for n in zf.namelist() if n.lower().endswith(".parquet")]
                 if parquets:
                     with zf.open(parquets[0]) as f:
@@ -274,24 +278,40 @@ _OP_NORMALIZE = {
 def _fetch_arcep_mobile(
     session: Any, logger: Any, ingested_at: datetime, run_date: str
 ) -> pd.DataFrame:
+    import re
     import geopandas as gpd
 
-    # Découvrir le dernier trimestre disponible
+    # Découvrir les trimestres listés, du plus récent au plus ancien
+    trimestres: list[str] = []
     try:
         resp = session.get(_ARCEP_SITES_BASE)
-        trimestres = sorted(
-            [t.split("/")[0] for t in __import__("re").findall(r'href="(\d{4}_T\d/index\.html)"', resp.text)],
-            reverse=True
-        )
-        dernierT = trimestres[0] if trimestres else "2025_T4"
-    except Exception:
-        dernierT = "2025_T4"
+        trimestres = sorted(set(re.findall(r"(\d{4}_T\d)", resp.text)), reverse=True)
+    except Exception as exc:
+        logger.warning("Listing trimestres ARCEP échoué : %s", exc)
+    # Fallback : derniers trimestres plausibles si le listing échoue
+    if not trimestres:
+        trimestres = ["2025_T4", "2025_T3", "2025_T2", "2025_T1", "2024_T4"]
 
-    url_csv = f"{_ARCEP_SITES_BASE}{dernierT}/{ dernierT}_sites_Metropole.csv"
-    logger.info("ARCEP sites mobiles : %s (trimestre %s)", url_csv, dernierT)
+    # Le répertoire d'un trimestre peut exister AVANT que le CSV soit publié
+    # (ex : 2026_T1 listé mais CSV 404). On essaie donc du plus récent au plus
+    # ancien jusqu'à obtenir un CSV réellement disponible (HTTP 200).
+    raw = None
+    dernierT = None
+    for q in trimestres:
+        url_csv = f"{_ARCEP_SITES_BASE}{q}/{q}_sites_Metropole.csv"
+        try:
+            head = session.get(url_csv, stream=True)
+            if head.status_code == 200:
+                logger.info("ARCEP sites mobiles : trimestre retenu %s", q)
+                raw = head.content
+                dernierT = q
+                break
+            logger.debug("ARCEP %s indisponible (HTTP %d) — essai trimestre précédent", q, head.status_code)
+        except Exception as exc:
+            logger.debug("ARCEP %s erreur : %s", q, exc)
 
-    raw = _download_bytes(session, logger, url_csv)
     if raw is None:
+        logger.warning("ARCEP mobile : aucun trimestre avec CSV disponible")
         return pd.DataFrame(columns=COLS_MOBILE)
 
     try:
@@ -479,46 +499,57 @@ def _fetch_insee_logements(
 
     logger.info("INSEE logements brut : %d × %d", *df_raw.shape)
 
-    # Vérifier la présence des colonnes attendues
-    missing = [c for c in _INSEE_COL_MAP if c not in df_raw.columns]
-    if missing:
-        logger.warning("Colonnes INSEE manquantes : %s", missing)
-        logger.debug("Colonnes disponibles : %s", list(df_raw.columns)[:20])
-
-    # Filtre Paris (codes 75101–75120)
-    code_col = _find_col(df_raw, ["CODGEO", "codgeo", "code_commune", "commune_code"])
+    # Base infracommunale (IRIS) : code commune = colonne COM.
+    code_col = _find_col(df_raw, ["COM", "CODGEO", "code_commune", "commune_code"])
     if not code_col:
-        logger.error("Colonne CODGEO introuvable dans le fichier INSEE")
+        logger.error("Colonne commune (COM/CODGEO) introuvable dans le fichier INSEE")
         return pd.DataFrame(columns=COLS_LOGEMENTS)
 
     df_paris = df_raw[df_raw[code_col].astype(str).str.strip().isin(PARIS_CODES)].copy()
-    logger.info("INSEE logements Paris : %d arrondissements", len(df_paris))
+    if df_paris.empty:
+        logger.warning("INSEE logements : aucune ligne Paris")
+        return pd.DataFrame(columns=COLS_LOGEMENTS)
+    df_paris["commune_code"] = df_paris[code_col].astype(str).str.strip()
 
-    def _safe_int(col_name: str) -> pd.Series:
-        if col_name in df_paris.columns:
-            return pd.to_numeric(df_paris[col_name], errors="coerce").fillna(0).astype("Int64")
-        return pd.Series([pd.NA] * len(df_paris), dtype="Int64")
+    # Millésime des colonnes (P21_ pour RP2021, P20_ pour RP2020) — détection auto
+    prefix = "P21" if any(c.startswith("P21_RP") for c in df_paris.columns) else "P20"
 
-    nb_total = _safe_int("P20_RP")
-    nb_t2    = _safe_int("P20_RP_2P")
-    nb_t3    = _safe_int("P20_RP_3P")
+    def _num(col_name: str) -> pd.Series:
+        return (pd.to_numeric(df_paris[col_name], errors="coerce").fillna(0)
+                if col_name in df_paris.columns else pd.Series(0.0, index=df_paris.index))
 
-    pct_t2_t3 = ((nb_t2 + nb_t3) / nb_total * 100).round(2).where(nb_total > 0)
+    # IRIS → agrégation par commune (somme des résidences principales par taille)
+    df_paris = df_paris.assign(
+        _total=_num(f"{prefix}_RP"),
+        _t1=_num(f"{prefix}_RP_1P"), _t2=_num(f"{prefix}_RP_2P"),
+        _t3=_num(f"{prefix}_RP_3P"), _t4=_num(f"{prefix}_RP_4P"),
+        _t5=_num(f"{prefix}_RP_5PP"),
+    )
+    agg = (
+        df_paris.groupby("commune_code")[["_total", "_t1", "_t2", "_t3", "_t4", "_t5"]]
+        .sum().round().astype("Int64").reset_index()
+    )
+    # Total cohérent : si _total absent/0, on le reconstitue depuis la somme des pièces
+    pieces_sum = agg[["_t1", "_t2", "_t3", "_t4", "_t5"]].sum(axis=1)
+    agg["_total"] = agg["_total"].where(agg["_total"] > 0, pieces_sum)
+
+    pct_t2_t3 = ((agg["_t2"] + agg["_t3"]) / agg["_total"] * 100).round(2).where(agg["_total"] > 0)
 
     rows = pd.DataFrame({
-        "commune_code":       df_paris[code_col].astype(str).str.strip(),
-        "arrondissement":     df_paris[code_col].astype(str).str.strip().str[-2:].astype(int),
-        "nb_logements_total": nb_total,
-        "nb_t1":              _safe_int("P20_RP_1P"),
-        "nb_t2":              nb_t2,
-        "nb_t3":              nb_t3,
-        "nb_t4":              _safe_int("P20_RP_4P"),
-        "nb_t5_plus":         _safe_int("P20_RP_5PP"),
+        "commune_code":       agg["commune_code"],
+        "arrondissement":     agg["commune_code"].str[-2:].astype(int),
+        "nb_logements_total": agg["_total"],
+        "nb_t1":              agg["_t1"],
+        "nb_t2":              agg["_t2"],
+        "nb_t3":              agg["_t3"],
+        "nb_t4":              agg["_t4"],
+        "nb_t5_plus":         agg["_t5"],
         "pct_t2_t3":          pct_t2_t3,
-        "annee_ref":          2020,
+        "annee_ref":          2021 if prefix == "P21" else 2020,
         "ingested_at":        ingested_at,
     })
 
+    logger.info("INSEE logements Paris : %d arrondissements (millésime %s)", len(rows), prefix)
     return rows[COLS_LOGEMENTS].sort_values("arrondissement").reset_index(drop=True)
 
 

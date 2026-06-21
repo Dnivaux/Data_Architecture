@@ -75,6 +75,13 @@ BRUITPARIF_FALLBACK_URLS = [
 BRUITPARIF_ARCGIS_BASE = "https://bruitparif.opendata.arcgis.com/api/explore/v2.1"
 BRUITPARIF_CBS_DATASET = "indicateurs-cbs-par-commune-ile-de-france"
 
+# Source primaire fiable : Paris Open Data — exposition au bruit routier par
+# arrondissement (Lden/Ln au-dessus des seuils réglementaire et OMS), par année.
+# Format large : 1 colonne par arrondissement (lden_exposition_oms_5eme … _20eme,
+# + _pariscentre pour les 1er-4e fusionnés depuis 2020).
+PARIS_OD_BASE = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets"
+PARIS_OD_NOISE_DATASET = "bruit-exposition-des-parisien-ne-s-aux-depassements-des-seuils-nocturne-ou-journ"
+
 PARIS_CODES = {f"751{str(i).zfill(2)}" for i in range(1, 21)}
 
 # ---------------------------------------------------------------------------
@@ -369,6 +376,75 @@ def _normalise_bruitparif_records(records: list[dict], ingested_at: datetime) ->
 
 
 # ---------------------------------------------------------------------------
+# Source primaire — Paris Open Data exposition bruit par arrondissement
+# ---------------------------------------------------------------------------
+
+def _fetch_paris_noise(session: Any, logger: Any, ingested_at: datetime) -> pd.DataFrame:
+    """
+    Récupère l'exposition au bruit routier par arrondissement (Paris Open Data).
+
+    Le dataset est en format large (1 colonne par arrondissement). On prend
+    l'année la plus récente et on déplie en lignes longues compatibles avec
+    le schéma Bronze bruitparif (commune_code, indicateur Lden/Ln, surface_ha).
+
+    On retient le seuil OMS (~53 dB Lden / 45 dB Ln), sémantiquement proche de
+    « surface/population exposée ≥ 55 dB » utilisé par le score Tranquillité.
+    Paris Centre (colonne *_pariscentre*) couvre les 1er-4e : la valeur est
+    répartie également sur ces 4 arrondissements.
+    """
+    url = f"{PARIS_OD_BASE}/{PARIS_OD_NOISE_DATASET}/records"
+    try:
+        resp = session.get(url, params={"limit": 100, "order_by": "annee desc"}, verify=False)
+        if resp.status_code != 200:
+            logger.warning("Paris OD bruit HTTP %d", resp.status_code)
+            return pd.DataFrame(columns=COLS_BRUIT)
+        results = resp.json().get("results", [])
+    except Exception as exc:
+        logger.warning("Paris OD bruit échoué : %s", exc)
+        return pd.DataFrame(columns=COLS_BRUIT)
+
+    if not results:
+        return pd.DataFrame(columns=COLS_BRUIT)
+
+    def _year(r: dict) -> int:
+        try:
+            return int(r.get("annee") or 0)
+        except (ValueError, TypeError):
+            return 0
+
+    latest = max(results, key=_year)
+    annee = _year(latest)
+
+    rows: list[dict] = []
+    for arr in range(1, 21):
+        suffix = "pariscentre" if arr <= 4 else f"{arr}eme"
+        divisor = 4.0 if arr <= 4 else 1.0
+        for indic in ("Lden", "Ln"):
+            key = f"{indic.lower()}_exposition_oms_{suffix}"
+            val = latest.get(key)
+            try:
+                surface = float(val) / divisor if val is not None else float("nan")
+            except (ValueError, TypeError):
+                surface = float("nan")
+            rows.append({
+                "commune_code":    f"751{arr:02d}",
+                "arrondissement":  arr,
+                "source_bruit":    "routier",
+                "indicateur":      indic,
+                "tranche_db":      "55+",
+                "surface_ha":      surface,
+                "pop_exposee":     0,
+                "pct_pop_exposee": float("nan"),
+                "annee_ref":       annee,
+                "ingested_at":     ingested_at,
+            })
+
+    df = pd.DataFrame(rows, columns=COLS_BRUIT)
+    logger.info("Paris OD bruit → %d lignes (année %d, 20 arrondissements)", len(df), annee)
+    return df
+
+
+# ---------------------------------------------------------------------------
 # Récupération principale Bruitparif
 # ---------------------------------------------------------------------------
 
@@ -480,9 +556,12 @@ def ingest() -> pd.DataFrame:
 
     session = build_session(retries=3, backoff_factor=2.0, timeout=60)
 
-    # --- Source 1 : Bruitparif CBS ---
-    logger.info(">>> Source 1/2 : Bruitparif — CBS Île-de-France")
-    df_bruit = _fetch_bruitparif(session, logger, ingested_at)
+    # --- Source 1 : exposition bruit (Paris OD primaire, Bruitparif CBS fallback) ---
+    logger.info(">>> Source 1/2 : Exposition au bruit par arrondissement")
+    df_bruit = _fetch_paris_noise(session, logger, ingested_at)
+    if df_bruit.empty:
+        logger.info("Paris OD bruit indisponible — repli sur Bruitparif CBS")
+        df_bruit = _fetch_bruitparif(session, logger, ingested_at)
     if not df_bruit.empty:
         path = save_parquet(
             df_bruit, "bruitparif",

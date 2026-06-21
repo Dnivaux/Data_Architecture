@@ -77,12 +77,22 @@ CREATE TABLE IF NOT EXISTS gold_arrondissement_summary (
     avg_docks_available     REAL,
     avg_bikes_pct           REAL,
     electric_bike_ratio     REAL,
+    -- Transports en commun (ICAR) par mode
+    transit_stop_count      INTEGER,
+    metro_count             INTEGER,
+    rer_count               INTEGER,
+    tram_count              INTEGER,
+    bus_count               INTEGER,
     -- Métriques brutes santé environnementale
     nb_ilots_fraicheur      INTEGER,
     surface_fraicheur_ha    REAL,
     nb_arbres               INTEGER,
     arbres_per_km2          REAL,
     nb_airparif_stations    INTEGER,
+    -- Qualité de l'air & pollen (Open-Meteo)
+    european_aqi            REAL,
+    pollen_total            REAL,
+    pollen_risk             TEXT,
     -- Métriques brutes tranquillité
     crime_count_total       INTEGER,
     crime_rate_per_1000     REAL,
@@ -140,12 +150,23 @@ CREATE TABLE IF NOT EXISTS gold_price_timeline (
 );
 """
 
+_DDL_SOCIAL_HOUSING_TIMELINE = """
+CREATE TABLE IF NOT EXISTS gold_social_housing_timeline (
+    arrondissement          SMALLINT,
+    annee                   SMALLINT,
+    logements_finances      INTEGER,
+    logements_cumules       INTEGER,
+    PRIMARY KEY (arrondissement, annee)
+);
+"""
+
 # Colonnes constituant la clé primaire de chaque table (pour l'upsert)
 _PK_COLUMNS: dict[str, list[str]] = {
     "gold_arrondissement_summary": ["arrondissement"],
     "gold_indicator_scores":       ["arrondissement"],
     "gold_poi_catalog":            ["id"],
     "gold_price_timeline":         ["arrondissement", "year"],
+    "gold_social_housing_timeline":["arrondissement", "annee"],
 }
 
 _DDL_MAP = {
@@ -153,6 +174,7 @@ _DDL_MAP = {
     "gold_indicator_scores":       _DDL_INDICATOR_SCORES,
     "gold_poi_catalog":            _DDL_POI,
     "gold_price_timeline":         _DDL_TIMELINE,
+    "gold_social_housing_timeline":_DDL_SOCIAL_HOUSING_TIMELINE,
 }
 
 
@@ -177,14 +199,43 @@ def _has_postgis(engine: Engine) -> bool:
         return False
 
 
+def _parse_ddl_columns(ddl: str) -> list[tuple[str, str]]:
+    """Extrait les couples (nom, type) des colonnes déclarées dans un DDL CREATE TABLE."""
+    cols: list[tuple[str, str]] = []
+    for line in ddl.splitlines():
+        s = line.strip().rstrip(",")
+        if not s or s.startswith(("CREATE", ")", "--", "PRIMARY")):
+            continue
+        parts = s.split()
+        if len(parts) >= 2 and parts[0].isidentifier():
+            # type = jusqu'au mot-clé PRIMARY le cas échéant
+            type_tokens = []
+            for tok in parts[1:]:
+                if tok.upper() == "PRIMARY":
+                    break
+                type_tokens.append(tok)
+            cols.append((parts[0], " ".join(type_tokens)))
+    return cols
+
+
 def _ensure_schema(engine: Engine, table_name: str, logger: Any) -> None:
-    """Crée la table si elle n'existe pas encore."""
+    """
+    Crée la table si absente, puis ajoute idempotemment les colonnes manquantes.
+
+    Le ALTER TABLE ... ADD COLUMN IF NOT EXISTS gère la migration des bases
+    existantes lorsqu'on enrichit le schéma (ex. ajout european_aqi / pollen),
+    sans devoir DROP la table.
+    """
     ddl = _DDL_MAP.get(table_name)
     if not ddl:
         return
     with engine.begin() as conn:
         conn.execute(text(ddl))
-    logger.debug("Table '%s' prête (CREATE IF NOT EXISTS)", table_name)
+        for col_name, col_type in _parse_ddl_columns(ddl):
+            conn.execute(text(
+                f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+            ))
+    logger.debug("Table '%s' prête (schéma synchronisé)", table_name)
 
 
 # ---------------------------------------------------------------------------
@@ -352,10 +403,11 @@ def export_all(
 
     # Matrice fichier → table
     export_plan = [
-        ("arrondissement_summary.parquet", "gold_arrondissement_summary"),
-        ("indicator_scores.parquet",       "gold_indicator_scores"),
-        ("poi_catalog.parquet",            "gold_poi_catalog"),
-        ("price_timeline.parquet",         "gold_price_timeline"),
+        ("arrondissement_summary.parquet",     "gold_arrondissement_summary"),
+        ("indicator_scores.parquet",           "gold_indicator_scores"),
+        ("poi_catalog.parquet",                "gold_poi_catalog"),
+        ("price_timeline.parquet",             "gold_price_timeline"),
+        ("social_housing_timeline.parquet",    "gold_social_housing_timeline"),
     ]
 
     if tables:
@@ -420,8 +472,8 @@ Exemples :
             tables=args.tables,
         )
         for table, count in results.items():
-            status = "✓" if count >= 0 else "✗"
-            print(f"  {status}  {table} : {count} lignes")
+            status = "OK " if count >= 0 else "ERR"
+            print(f"  [{status}]  {table} : {count} lignes")
         sys.exit(0 if all(v >= 0 for v in results.values()) else 1)
     except Exception as e:
         print(f"ERREUR : {e}", file=sys.stderr)

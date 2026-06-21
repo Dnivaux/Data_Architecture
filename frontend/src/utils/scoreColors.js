@@ -76,7 +76,8 @@ export function priceToChoroplethColor(price, min, max, alpha = 0.8) {
  * Plus = meilleur (vert) sauf median_price (plus = rouge).
  */
 const _MINMAX_HIGHER_BETTER = new Set(['nombre_logements_sociaux']);
-const _MINMAX_LOWER_BETTER  = new Set(['median_price']);
+// Plus la valeur est basse, mieux c'est (air pur, peu de pollen, prix bas)
+const _MINMAX_LOWER_BETTER  = new Set(['median_price', 'european_aqi', 'pollen_total']);
 
 /** Couleur par indicateur + valeur (dispatch automatique) */
 export function indicatorColor(indicatorId, value, allValues = [], alpha = 0.8) {

@@ -75,6 +75,37 @@ def aggregate_prices_by_arrondissement() -> pd.DataFrame:
     return grouped
 
 
+def aggregate_social_housing_by_year() -> pd.DataFrame:
+    """
+    Évolution du parc social financé par arrondissement × année.
+
+    Produit, par (arrondissement, annee) :
+      - logements_finances : logements agréés cette année-là
+      - logements_cumules  : stock cumulé depuis la première année observée
+    Répond à l'attendu consigne « part des logements sociaux et son évolution ».
+    """
+    sh = read_parquet("social_housing")
+    if sh.empty or not {"arrondissement", "annee", "nombre_logements"} <= set(sh.columns):
+        return pd.DataFrame()
+
+    sh = sh.copy()
+    sh["arrondissement"] = pd.to_numeric(sh["arrondissement"], errors="coerce").astype("Int64")
+    sh["annee"] = pd.to_numeric(sh["annee"], errors="coerce").astype("Int64")
+    sh["nombre_logements"] = pd.to_numeric(sh["nombre_logements"], errors="coerce").fillna(0)
+    sh = sh.dropna(subset=["arrondissement", "annee"])
+    sh = sh[(sh["arrondissement"] >= 1) & (sh["arrondissement"] <= 20)]
+
+    grouped = (
+        sh.groupby(["arrondissement", "annee"])["nombre_logements"]
+        .sum().reset_index(name="logements_finances")
+        .sort_values(["arrondissement", "annee"])
+    )
+    grouped["logements_cumules"] = (
+        grouped.groupby("arrondissement")["logements_finances"].cumsum()
+    )
+    return grouped.reset_index(drop=True)
+
+
 def aggregate_amenities_by_arrondissement() -> pd.DataFrame:
     """Compte les POI OSM par arrondissement (sjoin spatial existant)."""
     import geopandas as gpd
@@ -176,6 +207,13 @@ def build_silver_layer() -> None:
             _save(amenities, "amenities_by_arrondissement.parquet", logger)
     except Exception as exc:
         logger.error("Erreur agrégation amenities : %s", exc, exc_info=True)
+
+    try:
+        sh_timeline = aggregate_social_housing_by_year()
+        if not sh_timeline.empty:
+            _save(sh_timeline, "social_housing_by_year.parquet", logger)
+    except Exception as exc:
+        logger.error("Erreur agrégation logements sociaux : %s", exc, exc_info=True)
 
     elapsed = time.perf_counter() - started
     logger.info("=" * 60)
