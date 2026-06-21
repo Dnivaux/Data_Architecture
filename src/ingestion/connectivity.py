@@ -92,11 +92,9 @@ ARCEP_FIBRE_FALLBACK = (
     "8d5a3498-8f44-49e0-9e08-18475f5fe2b0"
 )
 
-# INSEE RP2021 « base infracommunale Logement » — ZIP contenant un CSV IRIS.
-# (L'ancien node 7705897 / RP2020 renvoie désormais 404.)
-INSEE_LOGCOM_URL = (
-    "https://www.insee.fr/fr/statistiques/fichier/8268838/base-ic-logement-2021_csv.zip"
-)
+# INSEE logements par commune — URL découverte dynamiquement via data.gouv.fr
+# (l'INSEE publie chaque année un nouveau millésime : RP2020, RP2021, RP2022…)
+# Ne pas fixer d'URL en dur : utiliser _search_insee_logcom_url() à la place.
 
 PARIS_CODES = {f"751{str(i).zfill(2)}" for i in range(1, 21)}
 
@@ -209,16 +207,13 @@ def _bytes_to_df(raw: bytes, logger: Any) -> pd.DataFrame:
             with zipfile.ZipFile(io.BytesIO(raw)) as zf:
                 csvs = [n for n in zf.namelist() if n.lower().endswith(".csv")]
                 if csvs:
-                    logger.debug("ZIP → CSV '%s'", csvs[0])
-                    for enc in ("utf-8", "latin-1", "utf-8-sig"):
-                        for sep in (";", ",", "\t"):
+                    with zf.open(csvs[0]) as f:
+                        logger.debug("ZIP → CSV '%s'", csvs[0])
+                        for enc in ("utf-8", "latin-1", "utf-8-sig"):
                             try:
-                                with zf.open(csvs[0]) as f:
-                                    df = pd.read_csv(f, sep=sep, encoding=enc, low_memory=False)
-                                if df.shape[1] > 1:   # séparateur correct trouvé
-                                    return df
-                            except (UnicodeDecodeError, Exception):
-                                continue
+                                return pd.read_csv(f, sep=None, engine="python", encoding=enc, low_memory=False)
+                            except UnicodeDecodeError:
+                                f.seek(0)
                 parquets = [n for n in zf.namelist() if n.lower().endswith(".parquet")]
                 if parquets:
                     with zf.open(parquets[0]) as f:
@@ -278,40 +273,24 @@ _OP_NORMALIZE = {
 def _fetch_arcep_mobile(
     session: Any, logger: Any, ingested_at: datetime, run_date: str
 ) -> pd.DataFrame:
-    import re
     import geopandas as gpd
 
-    # Découvrir les trimestres listés, du plus récent au plus ancien
-    trimestres: list[str] = []
+    # Découvrir le dernier trimestre disponible
     try:
         resp = session.get(_ARCEP_SITES_BASE)
-        trimestres = sorted(set(re.findall(r"(\d{4}_T\d)", resp.text)), reverse=True)
-    except Exception as exc:
-        logger.warning("Listing trimestres ARCEP échoué : %s", exc)
-    # Fallback : derniers trimestres plausibles si le listing échoue
-    if not trimestres:
-        trimestres = ["2025_T4", "2025_T3", "2025_T2", "2025_T1", "2024_T4"]
+        trimestres = sorted(
+            [t.split("/")[0] for t in __import__("re").findall(r'href="(\d{4}_T\d/index\.html)"', resp.text)],
+            reverse=True
+        )
+        dernierT = trimestres[0] if trimestres else "2025_T4"
+    except Exception:
+        dernierT = "2025_T4"
 
-    # Le répertoire d'un trimestre peut exister AVANT que le CSV soit publié
-    # (ex : 2026_T1 listé mais CSV 404). On essaie donc du plus récent au plus
-    # ancien jusqu'à obtenir un CSV réellement disponible (HTTP 200).
-    raw = None
-    dernierT = None
-    for q in trimestres:
-        url_csv = f"{_ARCEP_SITES_BASE}{q}/{q}_sites_Metropole.csv"
-        try:
-            head = session.get(url_csv, stream=True)
-            if head.status_code == 200:
-                logger.info("ARCEP sites mobiles : trimestre retenu %s", q)
-                raw = head.content
-                dernierT = q
-                break
-            logger.debug("ARCEP %s indisponible (HTTP %d) — essai trimestre précédent", q, head.status_code)
-        except Exception as exc:
-            logger.debug("ARCEP %s erreur : %s", q, exc)
+    url_csv = f"{_ARCEP_SITES_BASE}{dernierT}/{ dernierT}_sites_Metropole.csv"
+    logger.info("ARCEP sites mobiles : %s (trimestre %s)", url_csv, dernierT)
 
+    raw = _download_bytes(session, logger, url_csv)
     if raw is None:
-        logger.warning("ARCEP mobile : aucun trimestre avec CSV disponible")
         return pd.DataFrame(columns=COLS_MOBILE)
 
     try:
@@ -471,85 +450,190 @@ def _fetch_arcep_fibre(
 
 
 # ---------------------------------------------------------------------------
-# Source 3 — INSEE RP2020 Logements par taille
+# Source 3 — INSEE RP Logements par taille (millésime détecté dynamiquement)
 # ---------------------------------------------------------------------------
 
-# Noms de colonnes stables de l'INSEE RP2020 (logements par nombre de pièces)
-_INSEE_COL_MAP = {
-    "CODGEO":        "commune_code",
-    "P20_RP":        "nb_logements_total",   # Résidences principales
-    "P20_RP_1P":     "nb_t1",                # 1 pièce = T1
-    "P20_RP_2P":     "nb_t2",                # 2 pièces = T2
-    "P20_RP_3P":     "nb_t3",                # 3 pièces = T3
-    "P20_RP_4P":     "nb_t4",                # 4 pièces = T4
-    "P20_RP_5PP":    "nb_t5_plus",           # 5+ pièces = T5+
-}
+def _search_insee_logcom_url(session: Any, logger: Any) -> str | None:
+    """
+    Cherche dynamiquement l'URL du fichier logements par commune (logcom)
+    sur data.gouv.fr via l'API de l'INSEE.
+
+    Requête : GET /api/1/datasets/?q=recensement+logements&organization=insee&page_size=5
+    Cible    : ressource dont le titre contient "logcom" (logements par commune),
+               en format CSV ou ZIP.
+
+    Retourne l'URL trouvée, ou None si aucune ressource pertinente n'est disponible.
+    """
+    try:
+        resp = session.get(
+            "https://www.data.gouv.fr/api/1/datasets/",
+            params={
+                "q":            "recensement logements",
+                "organization": "insee",
+                "page_size":    5,
+            },
+            timeout=15,
+            verify=False,
+        )
+        if resp.status_code != 200:
+            logger.warning("data.gouv.fr INSEE search HTTP %d", resp.status_code)
+            return None
+
+        for ds in resp.json().get("data", []):
+            logger.info("Dataset INSEE candidat : %s", ds.get("title", ""))
+            for res in ds.get("resources", []):
+                title_res = (res.get("title") or "").lower()
+                fmt       = (res.get("format") or "").lower()
+                url       = res.get("url", "")
+                if not url:
+                    continue
+                # Cibler les fichiers "logcom" : logements par commune
+                is_logcom = "logcom" in title_res or (
+                    "logement" in title_res and "commune" in title_res
+                )
+                is_ok_fmt = fmt in ("csv", "zip") or url.lower().endswith((".csv", ".zip"))
+                if is_logcom and is_ok_fmt:
+                    logger.info("Ressource logcom : '%s' → %s", res.get("title", ""), url)
+                    return url
+
+        logger.warning(
+            "Aucune ressource logcom CSV/ZIP trouvée dans les résultats data.gouv.fr INSEE"
+        )
+        return None
+
+    except Exception as exc:
+        logger.error("Erreur recherche INSEE logements data.gouv.fr : %s", exc)
+        return None
 
 
 def _fetch_insee_logements(
     session: Any, logger: Any, ingested_at: datetime
 ) -> pd.DataFrame:
-    raw = _download_bytes(session, logger, INSEE_LOGCOM_URL)
+    """
+    Télécharge et parse les données INSEE RP logements par commune.
+
+    Stratégie :
+      1. Recherche dynamique de l'URL via data.gouv.fr (aucun lien en dur)
+      2. Téléchargement CSV ou ZIP et parsing Pandas
+      3. Détection automatique du millésime depuis les noms de colonnes
+         (P20_RP → 2020, P21_RP → 2021, P22_RP → 2022…)
+      4. Filtre Paris uniquement (75101–75120)
+
+    Aucune donnée de secours inventée : retourne DataFrame vide si échec.
+    """
+    import re
+
+    # ---- 1. Découverte dynamique de l'URL ----
+    url = _search_insee_logcom_url(session, logger)
+    if url is None:
+        logger.warning("INSEE logements : URL introuvable — aucune donnée Bronze produite")
+        return pd.DataFrame(columns=COLS_LOGEMENTS)
+
+    # ---- 2. Téléchargement ----
+    raw = _download_bytes(session, logger, url)
     if raw is None:
         return pd.DataFrame(columns=COLS_LOGEMENTS)
 
+    # ---- 3. Parsing (ZIP → CSV ou CSV direct) ----
     df_raw = _bytes_to_df(raw, logger)
     if df_raw.empty:
+        logger.warning("INSEE logements : fichier vide ou format non reconnu (%s)", url)
         return pd.DataFrame(columns=COLS_LOGEMENTS)
 
     logger.info("INSEE logements brut : %d × %d", *df_raw.shape)
+    logger.debug("Colonnes (20 premières) : %s", list(df_raw.columns)[:20])
 
-    # Base infracommunale (IRIS) : code commune = colonne COM.
-    code_col = _find_col(df_raw, ["COM", "CODGEO", "code_commune", "commune_code"])
-    if not code_col:
-        logger.error("Colonne commune (COM/CODGEO) introuvable dans le fichier INSEE")
+    # ---- 4. Colonne code commune ----
+    code_col = _find_col(
+        df_raw,
+        ["CODGEO", "CODGEO_COUR", "codgeo", "code_commune", "INSEE_COM", "COMMUNE"],
+    )
+    if code_col is None:
+        # Heuristique : chercher une colonne contenant des codes Paris (75101-75120)
+        for col in df_raw.columns:
+            if df_raw[col].astype(str).str.strip().isin(PARIS_CODES).any():
+                code_col = col
+                logger.info("Colonne code commune déduite par heuristique : '%s'", col)
+                break
+    if code_col is None:
+        logger.error(
+            "Colonne code commune introuvable. Colonnes : %s", list(df_raw.columns)[:15]
+        )
         return pd.DataFrame(columns=COLS_LOGEMENTS)
 
+    # ---- 5. Filtre Paris ----
     df_paris = df_raw[df_raw[code_col].astype(str).str.strip().isin(PARIS_CODES)].copy()
     if df_paris.empty:
-        logger.warning("INSEE logements : aucune ligne Paris")
+        logger.warning(
+            "INSEE logements : aucun code Paris (75101-75120) dans la colonne '%s'", code_col
+        )
         return pd.DataFrame(columns=COLS_LOGEMENTS)
-    df_paris["commune_code"] = df_paris[code_col].astype(str).str.strip()
+    logger.info("INSEE logements Paris : %d arrondissements", len(df_paris))
 
-    # Millésime des colonnes (P21_ pour RP2021, P20_ pour RP2020) — détection auto
-    prefix = "P21" if any(c.startswith("P21_RP") for c in df_paris.columns) else "P20"
+    # ---- 6. Détection automatique du millésime ----
+    # Pattern : P20_RP → 2020, P21_RP → 2021, P22_RP → 2022, etc.
+    annee: int | None = None
+    for col in df_paris.columns:
+        m = re.match(r"P(\d{2})_RP(?:$|_)", col)
+        if m:
+            annee = 2000 + int(m.group(1))
+            break
+    if annee is None:
+        logger.warning(
+            "Millésime INSEE non détecté (colonnes P??_RP introuvables). "
+            "Colonnes disponibles : %s", list(df_paris.columns)[:15]
+        )
+        return pd.DataFrame(columns=COLS_LOGEMENTS)
 
-    def _num(col_name: str) -> pd.Series:
-        return (pd.to_numeric(df_paris[col_name], errors="coerce").fillna(0)
-                if col_name in df_paris.columns else pd.Series(0.0, index=df_paris.index))
+    yy     = annee - 2000
+    prefix = f"P{yy:02d}_RP"
+    logger.info("INSEE logements : millésime %d détecté (préfixe colonnes : '%s')", annee, prefix)
 
-    # IRIS → agrégation par commune (somme des résidences principales par taille)
-    df_paris = df_paris.assign(
-        _total=_num(f"{prefix}_RP"),
-        _t1=_num(f"{prefix}_RP_1P"), _t2=_num(f"{prefix}_RP_2P"),
-        _t3=_num(f"{prefix}_RP_3P"), _t4=_num(f"{prefix}_RP_4P"),
-        _t5=_num(f"{prefix}_RP_5PP"),
+    # ---- 7. Extraction robuste des colonnes ----
+    def _safe_col(col_exact: str, alt_patterns: list[str]) -> pd.Series:
+        """
+        Retourne la série numérique pour une colonne, avec repli sur patterns partiels.
+        Ne produit jamais de valeur inventée : retourne pd.NA si colonne absente.
+        """
+        if col_exact in df_paris.columns:
+            return pd.to_numeric(df_paris[col_exact], errors="coerce").fillna(0).astype("Int64")
+        for pat in alt_patterns:
+            matches = [c for c in df_paris.columns if pat.lower() in c.lower()]
+            if matches:
+                logger.info("  Colonne '%s' via pattern '%s'", matches[0], pat)
+                return pd.to_numeric(df_paris[matches[0]], errors="coerce").fillna(0).astype("Int64")
+        logger.debug("  Colonne '%s' absente (alternatives %s)", col_exact, alt_patterns)
+        return pd.Series([pd.NA] * len(df_paris), dtype="Int64", index=df_paris.index)
+
+    nb_total = _safe_col(f"{prefix}",     [f"RP_{yy:02d}", "NB_RP"])
+    nb_t1    = _safe_col(f"{prefix}_1P",  ["_1P"])
+    nb_t2    = _safe_col(f"{prefix}_2P",  ["_2P"])
+    nb_t3    = _safe_col(f"{prefix}_3P",  ["_3P"])
+    nb_t4    = _safe_col(f"{prefix}_4P",  ["_4P"])
+    nb_t5    = _safe_col(f"{prefix}_5PP", ["_5PP", "_5P"])
+
+    pct_t2_t3 = (
+        (nb_t2.astype("float64") + nb_t3.astype("float64"))
+        / nb_total.astype("float64").replace(0, float("nan"))
+        * 100
+    ).round(2)
+
+    rows = pd.DataFrame(
+        {
+            "commune_code":       df_paris[code_col].astype(str).str.strip(),
+            "arrondissement":     df_paris[code_col].astype(str).str.strip().str[-2:].astype(int),
+            "nb_logements_total": nb_total,
+            "nb_t1":              nb_t1,
+            "nb_t2":              nb_t2,
+            "nb_t3":              nb_t3,
+            "nb_t4":              nb_t4,
+            "nb_t5_plus":         nb_t5,
+            "pct_t2_t3":          pct_t2_t3,
+            "annee_ref":          annee,
+            "ingested_at":        ingested_at,
+        },
+        index=df_paris.index,
     )
-    agg = (
-        df_paris.groupby("commune_code")[["_total", "_t1", "_t2", "_t3", "_t4", "_t5"]]
-        .sum().round().astype("Int64").reset_index()
-    )
-    # Total cohérent : si _total absent/0, on le reconstitue depuis la somme des pièces
-    pieces_sum = agg[["_t1", "_t2", "_t3", "_t4", "_t5"]].sum(axis=1)
-    agg["_total"] = agg["_total"].where(agg["_total"] > 0, pieces_sum)
-
-    pct_t2_t3 = ((agg["_t2"] + agg["_t3"]) / agg["_total"] * 100).round(2).where(agg["_total"] > 0)
-
-    rows = pd.DataFrame({
-        "commune_code":       agg["commune_code"],
-        "arrondissement":     agg["commune_code"].str[-2:].astype(int),
-        "nb_logements_total": agg["_total"],
-        "nb_t1":              agg["_t1"],
-        "nb_t2":              agg["_t2"],
-        "nb_t3":              agg["_t3"],
-        "nb_t4":              agg["_t4"],
-        "nb_t5_plus":         agg["_t5"],
-        "pct_t2_t3":          pct_t2_t3,
-        "annee_ref":          2021 if prefix == "P21" else 2020,
-        "ingested_at":        ingested_at,
-    })
-
-    logger.info("INSEE logements Paris : %d arrondissements (millésime %s)", len(rows), prefix)
     return rows[COLS_LOGEMENTS].sort_values("arrondissement").reset_index(drop=True)
 
 
@@ -604,7 +688,7 @@ def ingest() -> pd.DataFrame:
         logger.warning("ARCEP fibre : aucune donnée Paris — fichier Bronze non créé")
 
     # --- Source 3 : INSEE Logements ---
-    logger.info(">>> Source 3/3 : INSEE RP2020 Logements par taille")
+    logger.info(">>> Source 3/3 : INSEE RP Logements par taille (millésime détecté dynamiquement)")
     df_logements = _fetch_insee_logements(session, logger, ingested_at)
     if not df_logements.empty:
         path = save_parquet(df_logements, "insee_logements",
