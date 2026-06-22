@@ -16,8 +16,7 @@ Schéma arrondissement_summary (clé primaire pour PostgreSQL)
   geometry_wkt            str   Polygone WKT EPSG:4326 (PostGIS-ready)
   --- Scores historiques ---
   anime_score             float 0-100
-  calme_score             float 0-100
-  accessibilite_score     float 0-100
+  calme_score             float 0-100 (déprécié — NULL)
   --- Nouveaux scores stratégiques ---
   connectivity_score      float 0-100
   mobility_score          float 0-100
@@ -69,15 +68,17 @@ _NOMS_ARR = {
     17: "Paris 17e", 18: "Paris 18e", 19: "Paris 19e", 20: "Paris 20e",
 }
 
-# Poids du score composite de vivabilité globale (v2 — calme fusionné dans tranquility)
+# Poids du score composite de vivabilité globale
+# (v3 — calme fusionné dans tranquility ; accessibilité retirée comme indicateur,
+#  le prix DVF reste exposé en métrique brute. 5 piliers à poids égal.)
 _LIVABILITY_WEIGHTS = {
-    "anime_score":         0.10,
-    # calme_score supprimé (fusionné dans tranquility_score v2)
-    "accessibilite_score": 0.18,
-    "connectivity_score":  0.18,
-    "mobility_score":      0.18,
-    "health_env_score":    0.18,
-    "tranquility_score":   0.18,
+    "anime_score":         0.20,
+    # calme_score supprimé (fusionné dans tranquility_score)
+    # accessibilite_score supprimé (le prix DVF reste une métrique, pas un score)
+    "connectivity_score":  0.20,
+    "mobility_score":      0.20,
+    "health_env_score":    0.20,
+    "tranquility_score":   0.20,
 }
 
 

@@ -9,7 +9,6 @@ const SCORE_AXES = [
   { key: 'connectivity_score',  label: 'Connectivité' },
   { key: 'mobility_score',      label: 'Mobilité'     },
   { key: 'health_env_score',    label: 'Santé Env.'   },
-  { key: 'accessibilite_score', label: 'Accessibilité'},
 ];
 
 function buildData(score) {

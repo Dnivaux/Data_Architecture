@@ -17,8 +17,7 @@ class ArrondissementScore(BaseModel):
 
     # --- Scores historiques ---
     anime_score:         float = Field(0.0, ge=0, le=100, description="Score d'animation (bars, clubs, parcs)")
-    calme_score:         float = Field(0.0, ge=0, le=100, description="Score de calme (criminalité inversée + air)")
-    accessibilite_score: float = Field(0.0, ge=0, le=100, description="Score d'accessibilité financière")
+    calme_score:         float = Field(0.0, ge=0, le=100, description="Score de calme (déprécié — fusionné dans tranquillité)")
 
     # --- Nouveaux scores stratégiques ---
     connectivity_score:  Optional[float] = Field(None, ge=0, le=100, description="Score connectivité fibre + 4G/5G + T2/T3")
@@ -54,7 +53,6 @@ class ArrondissementDetail(BaseModel):
     # Scores
     anime_score:         Optional[float] = None
     calme_score:         Optional[float] = None
-    accessibilite_score: Optional[float] = None
     connectivity_score:  Optional[float] = None
     mobility_score:      Optional[float] = None
     health_env_score:    Optional[float] = None

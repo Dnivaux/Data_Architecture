@@ -148,7 +148,7 @@ export default function DashboardLayout({
 function computeGlobalAverage(scores) {
   if (!scores?.length) return null;
   const avgKeys = [
-    'anime_score', 'calme_score', 'accessibilite_score',
+    'anime_score', 'calme_score',
     'connectivity_score', 'mobility_score', 'health_env_score',
     'tranquility_score', 'livability_score', 'median_price',
     'social_housing_pct', 'bar_count', 'nightclub_count', 'park_count',

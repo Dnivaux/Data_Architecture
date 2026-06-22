@@ -56,7 +56,6 @@ CREATE TABLE IF NOT EXISTS gold_arrondissement_summary (
     -- Scores historiques
     anime_score             REAL,
     calme_score             REAL,
-    accessibilite_score     REAL,
     -- Nouveaux scores stratégiques
     connectivity_score      REAL,
     mobility_score          REAL,
@@ -121,7 +120,6 @@ CREATE TABLE IF NOT EXISTS gold_indicator_scores (
     geometry_wkt            TEXT,
     anime_score             REAL,
     calme_score             REAL,
-    accessibilite_score     REAL,
     connectivity_score      REAL,
     mobility_score          REAL,
     health_env_score        REAL,

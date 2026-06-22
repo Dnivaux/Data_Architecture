@@ -6,12 +6,11 @@ tous normalisés en min-max sur [0, 100].
 
 Scores historiques (révisés pour éviter la duplication) :
   - score_anime          : densité bars / nightclubs / parcs (OSM)
-  - score_calme          : inverse bruit Lden SONLY (score 100 = très calme/silencieux)
-  - score_accessibilite  : inverse prix DVF + logement social
+  - score_calme          : [déprécié] None — logique bruit fusionnée dans tranquility
 
 Nouveaux scores stratégiques :
   - score_connectivity   : fibre + 4G/5G + ratio T2-T3
-  - score_mobility       : transports en commun ICAR (50%) + Vélib' (50%)
+  - score_mobility       : transports ICAR par mode (60%) + densité stations Vélib' (40%)
   - score_health_env     : végétalisation (30%) + arbres (30%) + îlots (20%) + air_quality (20%)
   - score_tranquility    : inverse (crime 40% + bruit 35% + bars/clubs 25%)
 
@@ -19,6 +18,13 @@ Changements v2 (2026-05-21) :
   ✓ Suppression de la duplication "crime" entre calme et tranquility
   ✓ Redéfinition de calme : SEULEMENT bruit (meilleure sémantique)
   ✓ Intégration qualité air dans health_env (santé = air pur)
+
+Changements v3 (2026-06-22) :
+  ✓ Réintégration de la criminalité dans tranquility (40%) — la sécurité compte
+  ✓ Suppression de l'indicateur Accessibilité : le prix DVF médian reste exposé
+    comme métrique brute (median_price) mais ne produit plus de score
+  ✓ Mobilité : chaque mode ICAR normalisé séparément (anti-domination RER) ;
+    Vélib' réduit au comptage de stations (bornes libres → métrique détaillée)
 """
 from __future__ import annotations
 
@@ -177,37 +183,6 @@ class ArrondissementScorer:
         base["calme_score"] = None
         return base[["arrondissement", "calme_score"]]
 
-    def score_accessibilite(self) -> pd.DataFrame:
-        """Inverse prix DVF (médian) + % logement social. Score 100 = très accessible."""
-        base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
-
-        dvf_df = read_parquet("dvf")
-        if not dvf_df.empty and self.boundaries_gdf is not None and not self.boundaries_gdf.empty:
-            dvf_df = dvf_df.dropna(subset=["latitude", "longitude", "valeur_fonciere"])
-            dvf_gdf = gpd.GeoDataFrame(
-                dvf_df,
-                geometry=gpd.points_from_xy(dvf_df["longitude"], dvf_df["latitude"]),
-                crs="EPSG:4326",
-            )
-            joined = gpd.sjoin(
-                dvf_gdf, self.boundaries_gdf[["arrondissement", "geometry"]],
-                how="left", predicate="within",
-            )
-            price_agg = (
-                joined.groupby("arrondissement")["valeur_fonciere"]
-                .median().reset_index(name="median_price")
-            )
-            base = base.merge(price_agg, on="arrondissement", how="left")
-        else:
-            self.logger.warning("DVF ou boundaries vides — prix médian à NA")
-            base["median_price"] = pd.NA
-
-        base["social_housing_pct"] = pd.NA  # alimenté par revenus.py si disponible
-        base["price_score"]        = _normalize(base["median_price"], invert=True)
-        base["accessibilite_score"] = base["price_score"].round(1)
-        return base[["arrondissement", "median_price",
-                     "social_housing_pct", "accessibilite_score"]]
-
     # ------------------------------------------------------------------
     # Nouveaux scores stratégiques (lus depuis Silver indicators)
     # ------------------------------------------------------------------
@@ -239,12 +214,17 @@ class ArrondissementScorer:
 
     def score_mobility(self) -> pd.DataFrame:
         """
-        Score Mobilité 0-100 — v2 (ICAR + Vélib').
+        Score Mobilité 0-100 — v3 (ICAR + Vélib').
         Composantes :
-          Transports en commun ICAR (50%) :
-            transit_capacity_raw = metro*3 + rer*3 + tram*2 + bus*1 → normalisé
-          Mobilités douces Vélib' (50%) :
-            avg_bikes_available (20%) + station_count_velib (15%) + avg_docks_available (15%)
+          Transports en commun ICAR (60%) — chaque mode normalisé SÉPARÉMENT
+          puis pondéré, pour qu'un arrondissement à fort hub RER ne sature plus
+          tout le score (il ne plafonne que sa propre sous-composante) :
+            metro (40%) + rer (25%) + bus (20%) + tram (15%)
+          Densité Vélib' (40%) :
+            station_count_velib normalisé.
+
+        avg_bikes_available et avg_docks_available sont conservés comme métriques
+        détaillées (dashboard) mais ne pèsent plus dans le score.
         """
         df = _read_silver("mobility_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -255,35 +235,29 @@ class ArrondissementScorer:
 
         base = base.merge(df, on="arrondissement", how="left")
 
-        # --- Vélib' ---
-        s_bikes    = _normalize(base.get("avg_bikes_available",  pd.Series([0.0] * 20)))
+        # --- Vélib' : densité de stations uniquement ---
         s_stations = _normalize(base.get("station_count_velib",  pd.Series([0.0] * 20)))
-        # Bornes libres : moins saturé = meilleur accès
-        s_docks    = _normalize(base.get("avg_docks_available",  pd.Series([0.0] * 20)))
 
-        # --- Transports en commun ICAR ---
+        # --- Transports en commun ICAR (normalisation intra-mode) ---
         _icar_cols = ["metro_count", "rer_count", "tram_count", "bus_count"]
         if all(c in base.columns for c in _icar_cols):
-            metro = pd.to_numeric(base["metro_count"], errors="coerce").fillna(0)
-            rer   = pd.to_numeric(base["rer_count"],   errors="coerce").fillna(0)
-            tram  = pd.to_numeric(base["tram_count"],  errors="coerce").fillna(0)
-            bus   = pd.to_numeric(base["bus_count"],   errors="coerce").fillna(0)
-            # Capacité pondérée : metro/RER (×3) > tram (×2) > bus (×1)
-            transit_capacity_raw = metro * 3 + rer * 3 + tram * 2 + bus
-            s_transit = _normalize(transit_capacity_raw)
+            s_metro = _normalize(pd.to_numeric(base["metro_count"], errors="coerce").fillna(0))
+            s_rer   = _normalize(pd.to_numeric(base["rer_count"],   errors="coerce").fillna(0))
+            s_tram  = _normalize(pd.to_numeric(base["tram_count"],  errors="coerce").fillna(0))
+            s_bus   = _normalize(pd.to_numeric(base["bus_count"],   errors="coerce").fillna(0))
+            # Métro = colonne vertébrale parisienne > RER > bus > tram (périphérique)
+            s_transit = 0.40 * s_metro + 0.25 * s_rer + 0.20 * s_bus + 0.15 * s_tram
             self.logger.info(
-                "Score mobilité ICAR : capacité transit min=%.0f max=%.0f",
-                transit_capacity_raw.min(), transit_capacity_raw.max(),
+                "Score mobilité ICAR : modes normalisés séparément "
+                "(metro/rer/bus/tram = 40/25/20/15)",
             )
         else:
             self.logger.warning("Colonnes ICAR absentes du Silver mobility — s_transit par défaut 50")
             s_transit = pd.Series([50.0] * len(base))
 
         base["mobility_score"] = (
-            0.50 * s_transit
-            + 0.20 * s_bikes
-            + 0.15 * s_stations
-            + 0.15 * s_docks
+            0.60 * s_transit
+            + 0.40 * s_stations
         ).round(1)
 
         result_cols = [
@@ -346,19 +320,15 @@ class ArrondissementScorer:
 
     def score_tranquility(self) -> pd.DataFrame:
         """
-        Score Tranquillité (fusion Calme + Tranquillité) v2 — 0-100.
-        Mesure les nuisances sonores et nocturnes UNIQUEMENT.
+        Score Tranquillité (Sécurité + Calme + Vie nocturne) v3 — 0-100.
 
-        Composantes :
-          - bruit Lden (surface exposée ≥55 dB)  → 60%  [fusion de l'ancien Calme]
-          - densité bars + boîtes de nuit         → 40%
+        Composantes (inversées : valeur haute = nuisance → score bas) :
+          - criminalité (taux /1000 hab)          → 40%
+          - bruit Lden (surface exposée ≥55 dB)   → 35%  [ancien Calme]
+          - densité bars + boîtes de nuit          → 25%
 
-        Crime exclu volontairement : la criminalité reste visible en
-        « Métriques détaillées » (crime_count_total, crime_rate_per_1000)
-        mais n'influence plus ce score pour ne pas le confondre avec la sécurité.
-
-        Score 100 = arrondissement silencieux, peu de vie nocturne.
-        Score   0 = arrondissement bruyant avec forte densité bars/clubs.
+        Score 100 = arrondissement sûr, silencieux, peu de vie nocturne.
+        Score   0 = arrondissement à forte délinquance, bruyant, dense en bars/clubs.
         """
         df = _read_silver("tranquility_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -368,6 +338,17 @@ class ArrondissementScorer:
             return base
 
         base = base.merge(df, on="arrondissement", how="left")
+
+        # Criminalité : taux /1000 hab (corrige la taille de population), avec
+        # repli sur le comptage brut si le taux est absent. Plus bas = plus tranquille.
+        if "crime_rate_per_1000" in base.columns and pd.to_numeric(
+            base["crime_rate_per_1000"], errors="coerce"
+        ).notna().any():
+            s_crime = _normalize(base["crime_rate_per_1000"], invert=True)
+        else:
+            s_crime = _normalize(
+                base.get("crime_count_total", pd.Series([0.0] * 20)), invert=True
+            )
 
         # Bruit Lden (surface en ha exposée ≥ 55 dB) : plus bas = plus calme
         s_bruit = _normalize(
@@ -381,9 +362,10 @@ class ArrondissementScorer:
         )
         s_nightlife = _normalize(nightlife, invert=True)
 
-        base["tranquility_score"] = (0.60 * s_bruit + 0.40 * s_nightlife).round(1)
+        base["tranquility_score"] = (
+            0.40 * s_crime + 0.35 * s_bruit + 0.25 * s_nightlife
+        ).round(1)
 
-        # crime_count_total et crime_rate_per_1000 conservés comme métriques brutes
         return base[["arrondissement", "crime_count_total", "crime_rate_per_1000",
                      "noise_lden_surface_ha", "nb_bars", "nb_nightclubs",
                      "tranquility_score"]]
@@ -401,14 +383,13 @@ class ArrondissementScorer:
 
         anime         = self.score_anime()
         calme         = self.score_calme()
-        accessibilite = self.score_accessibilite()
         connectivity  = self.score_connectivity()
         mobility      = self.score_mobility()
         health_env    = self.score_health_env()
         tranquility   = self.score_tranquility()
 
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
-        for df in [anime, calme, accessibilite, connectivity,
+        for df in [anime, calme, connectivity,
                    mobility, health_env, tranquility]:
             if not df.empty:
                 base = base.merge(df, on="arrondissement", how="left")
