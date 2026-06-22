@@ -93,11 +93,11 @@ function KPISkeleton({ loading = false }) {
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className={`card ${loading ? 'animate-pulse' : ''}`}>
-          <div className="h-3 bg-[#D0D7DE] rounded w-2/3 mb-3" />
-          <div className="h-7 bg-[#D0D7DE] rounded w-1/2 mb-2" />
-          <div className="h-2 bg-[#D0D7DE] rounded w-full" />
+          <div className="h-3 bg-slate-200 rounded w-2/3 mb-3" />
+          <div className="h-7 bg-slate-200 rounded w-1/2 mb-2" />
+          <div className="h-2 bg-slate-200 rounded w-full" />
           {!loading && i === 0 && (
-            <p className="text-xs text-[#64748B] mt-2">Aucune donnée</p>
+            <p className="text-xs text-slate-500 mt-2">Aucune donnée</p>
           )}
         </div>
       ))}

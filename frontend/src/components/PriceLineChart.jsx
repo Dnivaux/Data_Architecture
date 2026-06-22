@@ -4,8 +4,8 @@ import {
 } from 'recharts';
 import { fmtInt } from '../utils/formatters';
 
-const COLOR_A = '#0F4C81';   // série principale (idem radar primary)
-const COLOR_B = '#2EC4B6';   // série comparée   (idem radar secondary)
+const COLOR_A = '#2563EB';   // série principale (idem radar primary)
+const COLOR_B = '#10B981';   // série comparée   (idem radar secondary)
 
 /** Tendance (%) entre la première et la dernière valeur non nulle d'une série. */
 function computeTrend(series) {
@@ -67,9 +67,9 @@ export default function PriceLineChart({
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-[#64748B] uppercase tracking-wide">Prix médian DVF</span>
+        <span className="text-xs text-slate-500 uppercase tracking-wide">Prix médian DVF</span>
         {trend && (
-          <span className={`text-xs font-medium ${+trend.pct >= 0 ? 'text-[#0F4C81]' : 'text-[#34D399]'}`}>
+          <span className={`text-xs font-medium ${+trend.pct >= 0 ? 'text-[#2563EB]' : 'text-[#10B981]'}`}>
             {+trend.pct >= 0 ? '+' : ''}{trend.pct} % depuis {trend.year}
           </span>
         )}
@@ -77,15 +77,15 @@ export default function PriceLineChart({
 
       <ResponsiveContainer width="100%" height={160}>
         <LineChart data={merged} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#D0D7DE" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
           <XAxis
             dataKey="year"
-            tick={{ fill: '#64748B', fontSize: 11 }}
+            tick={{ fill: '#475569', fontSize: 11 }}
             tickLine={false}
             axisLine={false}
           />
           <YAxis
-            tick={{ fill: '#64748B', fontSize: 11 }}
+            tick={{ fill: '#475569', fontSize: 11 }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v) => `${fmtInt(v)} €`}
@@ -93,15 +93,16 @@ export default function PriceLineChart({
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: '#F4F6F9',
-              border: '1px solid #D0D7DE',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
               borderRadius: 8,
               fontSize: 12,
+              boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
             }}
-            labelStyle={{ color: '#1E293B' }}
+            labelStyle={{ color: '#0F172A' }}
             formatter={(v, name) => [`${fmtInt(v)} €/m²`, name]}
           />
-          {comparing && <Legend wrapperStyle={{ fontSize: 12, color: '#64748B' }} />}
+          {comparing && <Legend wrapperStyle={{ fontSize: 12, color: '#475569' }} />}
           <Line
             type="monotone"
             dataKey={labelA}

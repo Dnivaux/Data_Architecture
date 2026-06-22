@@ -31,19 +31,19 @@ export default function KPICard({
     <div
       className={`card flex flex-col gap-3 relative overflow-hidden
         ${isClickable ? 'card-hover' : ''}
-        ${isLive ? 'ring-1 ring-[#2EC4B6]/40' : ''}`}
+        ${isLive ? 'ring-1 ring-[#10B981]/40' : ''}`}
       onClick={onClick}
     >
       {/* Halo de fond pour les cartes live */}
       {isLive && (
-        <div className="absolute inset-0 bg-[#2EC4B6]/5 pointer-events-none" />
+        <div className="absolute inset-0 bg-[#10B981]/5 pointer-events-none" />
       )}
 
       {/* En-tête */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <span className="material-icon text-xl">{icon}</span>
-          <span className="text-xs font-medium text-[#64748B] uppercase tracking-wide">
+          <span className="material-icon text-xl text-slate-500">{icon}</span>
+          <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
             {label}
           </span>
         </div>
@@ -51,21 +51,21 @@ export default function KPICard({
         {/* Badge LIVE */}
         {isLive && (
           <span className="relative flex h-2 w-2 mt-0.5">
-            <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-[#2EC4B6] opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2EC4B6]" />
+            <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#10B981]" />
           </span>
         )}
       </div>
 
       {/* Valeur principale */}
       <div className="flex items-end gap-2">
-        <span className={`text-2xl font-bold ${score != null ? scoreToTextClass(score) : 'text-[#1E293B]'}`}>
+        <span className={`text-2xl font-bold ${score != null ? scoreToTextClass(score) : 'text-slate-800'}`}>
           {value}
         </span>
         {trend && (
           <span
             className={`text-xs font-medium pb-0.5 ${
-              trendUp ? 'text-[#34D399]' : 'text-[#0F4C81]'
+              trendUp ? 'text-emerald-600' : 'text-rose-600'
             }`}
           >
             {trend}
@@ -75,7 +75,7 @@ export default function KPICard({
 
       {/* Sous-valeur */}
       {subValue && (
-        <p className="text-xs text-[#64748B] -mt-2">{subValue}</p>
+        <p className="text-xs text-slate-500 -mt-2">{subValue}</p>
       )}
 
       {/* Barre de score */}

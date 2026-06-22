@@ -9,24 +9,24 @@ export default function LiveStatusBadge({ isLive, lastUpdate, label = 'Temps ré
     <div className="flex items-center gap-2">
       <span className="relative flex h-2 w-2">
         {isLive && (
-          <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-[#2EC4B6] opacity-75" />
+          <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75" />
         )}
         <span
           className={`relative inline-flex h-2 w-2 rounded-full ${
-            isLive ? 'bg-[#2EC4B6]' : 'bg-[#64748B]'
+            isLive ? 'bg-[#10B981]' : 'bg-slate-400'
           }`}
         />
       </span>
-      <span className="text-xs text-[#64748B]">
+      <span className="text-xs text-slate-500">
         {isLive ? (
           <>
-            <span className="text-[#2EC4B6] font-medium">{label}</span>
+            <span className="text-[#10B981] font-medium">{label}</span>
             {lastUpdate && (
-              <span className="ml-1 text-[#64748B]">· {fmtRelative(lastUpdate)}</span>
+              <span className="ml-1 text-slate-500">· {fmtRelative(lastUpdate)}</span>
             )}
           </>
         ) : (
-          <span className="text-[#64748B]">Hors ligne</span>
+          <span className="text-slate-500">Hors ligne</span>
         )}
       </span>
     </div>

@@ -44,42 +44,42 @@ export default function RadarScoreChart({ primary, secondary, labelA = 'Sélecti
   return (
     <ResponsiveContainer width="100%" height={260}>
       <RadarChart data={merged} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-        <PolarGrid stroke="#D0D7DE" />
+        <PolarGrid stroke="#E2E8F0" />
         <PolarAngleAxis
           dataKey="subject"
-          tick={{ fill: '#64748B', fontSize: 11 }}
+          tick={{ fill: '#475569', fontSize: 11 }}
         />
         <PolarRadiusAxis
           angle={90}
           domain={[0, 100]}
-          tick={{ fill: '#64748B', fontSize: 9 }}
+          tick={{ fill: '#475569', fontSize: 9 }}
           tickCount={4}
         />
         <Radar
           name={labelA}
           dataKey={labelA}
-          stroke="#0F4C81"
-          fill="#0F4C81"
-          fillOpacity={0.35}
+          stroke="#2563EB"
+          fill="#2563EB"
+          fillOpacity={0.2}
           strokeWidth={2}
         />
         {dataB && (
           <Radar
             name={labelB}
             dataKey={labelB}
-            stroke="#2EC4B6"
-            fill="#2EC4B6"
-            fillOpacity={0.25}
+            stroke="#10B981"
+            fill="#10B981"
+            fillOpacity={0.15}
             strokeWidth={2}
           />
         )}
         <Tooltip
-          contentStyle={{ backgroundColor: '#F4F6F9', border: '1px solid #D0D7DE', borderRadius: 8 }}
-          labelStyle={{ color: '#1E293B', fontSize: 12 }}
-          itemStyle={{ color: '#64748B', fontSize: 12 }}
+          contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
+          labelStyle={{ color: '#0F172A', fontSize: 12 }}
+          itemStyle={{ color: '#475569', fontSize: 12 }}
           formatter={(v) => [`${v} / 100`]}
         />
-        {dataB && <Legend wrapperStyle={{ fontSize: 12, color: '#64748B' }} />}
+        {dataB && <Legend wrapperStyle={{ fontSize: 12, color: '#475569' }} />}
       </RadarChart>
     </ResponsiveContainer>
   );

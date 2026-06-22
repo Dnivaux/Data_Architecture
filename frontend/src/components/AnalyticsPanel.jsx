@@ -50,10 +50,10 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
 
       {/* Titre */}
       <div>
-        <h2 className="text-sm font-semibold text-[#1E293B]">
+        <h2 className="text-sm font-semibold text-slate-800">
           {name ?? 'Vue globale — Paris'}
         </h2>
-        <p className="text-xs text-[#64748B] mt-0.5">
+        <p className="text-xs text-slate-500 mt-0.5">
           {selectedArrondissement
             ? fmtArrondissement(selectedArrondissement)
             : '20 arrondissements · Sélectionnez un arrondissement sur la carte'}
@@ -63,7 +63,7 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
       {/* Comparaison */}
       {selectedArrondissement && (
         <div>
-          <label className="text-xs text-[#64748B] mb-1 block">Comparer avec</label>
+          <label className="text-xs text-slate-500 mb-1 block">Comparer avec</label>
           <select className="select-field" value={compareWith} onChange={handleCompare}>
             <option value="">— Choisir un arrondissement —</option>
             {Array.from({ length: 20 }, (_, i) => i + 1)
@@ -80,13 +80,13 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
       {/* Radar Chart */}
       <div className="card">
         <div className="flex items-start justify-between mb-1">
-          <p className="text-xs text-[#64748B] uppercase tracking-wide">
+          <p className="text-xs text-slate-500 uppercase tracking-wide">
             Profil des scores
           </p>
           {comparisonScore && (
             <div className="flex items-center gap-3 shrink-0">
-              <GlobalScoreBadge label={labelA} value={scoreData?.livability_score} color="#0F4C81" />
-              <GlobalScoreBadge label={labelB} value={comparisonScore?.livability_score} color="#2EC4B6" />
+              <GlobalScoreBadge label={labelA} value={scoreData?.livability_score} color="#2563EB" />
+              <GlobalScoreBadge label={labelB} value={comparisonScore?.livability_score} color="#10B981" />
             </div>
           )}
         </div>
@@ -107,10 +107,10 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
       <div className="card">
         {pricesError && !pricesLoading ? (
           <div className="h-40 flex flex-col items-center justify-center gap-2">
-            <span className="text-[#64748B] text-xs uppercase tracking-wide">Prix médian DVF</span>
-            <span className="text-[#2EC4B6] text-xs text-center leading-relaxed">
+            <span className="text-slate-500 text-xs uppercase tracking-wide">Prix médian DVF</span>
+            <span className="text-rose-500 text-xs text-center leading-relaxed font-medium">
               Données indisponibles<br />
-              <span className="text-[#64748B]">(table Gold non peuplée)</span>
+              <span className="text-slate-400 font-normal">(table Gold non peuplée)</span>
             </span>
           </div>
         ) : (
@@ -151,18 +151,18 @@ function GlobalScoreBadge({ label, value, color }) {
 // Bloc connectivité / meilleur opérateur
 // ─────────────────────────────────────────────────────────────────
 const OP_ICONS = {
-  orange: { icon: 'fiber_manual_record', color: '#2EC4B6' },
-  sfr: { icon: 'fiber_manual_record', color: '#0F4C81' },
-  bouygues: { icon: 'fiber_manual_record', color: '#34D399' },
-  free: { icon: 'fiber_manual_record', color: '#1F7A8C' },
+  orange: { icon: 'fiber_manual_record', color: '#FF6600' },
+  sfr: { icon: 'fiber_manual_record', color: '#E2001A' },
+  bouygues: { icon: 'fiber_manual_record', color: '#009FDF' },
+  free: { icon: 'fiber_manual_record', color: '#CB1C1B' },
 };
 
 function ConnectivityDetail({ data, loading }) {
   if (loading) {
     return (
       <div className="card">
-        <p className="text-xs text-[#64748B] uppercase tracking-wide mb-2">Réseau</p>
-        <p className="text-xs text-[#64748B] animate-pulse">Chargement…</p>
+        <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Réseau</p>
+        <p className="text-xs text-slate-400 animate-pulse">Chargement…</p>
       </div>
     );
   }
@@ -172,26 +172,26 @@ function ConnectivityDetail({ data, loading }) {
 
   return (
     <div className="card">
-      <p className="text-xs text-[#64748B] uppercase tracking-wide mb-3">Réseau &amp; Connectivité</p>
+      <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Réseau &amp; Connectivité</p>
 
       {/* Meilleurs opérateurs */}
       <div className="flex gap-3 mb-3">
         {best_4g && (
-          <div className="flex-1 bg-[#F4F6F9] border border-[#D0D7DE] rounded-lg p-2 text-center">
-            <p className="text-[10px] text-[#64748B] uppercase">Meilleur 4G</p>
-            <p className="text-xs font-semibold text-[#0F4C81] mt-0.5">{best_4g}</p>
+          <div className="flex-1 bg-slate-50 border border-slate-150 rounded-lg p-2 text-center">
+            <p className="text-[10px] text-slate-400 uppercase">Meilleur 4G</p>
+            <p className="text-xs font-semibold text-blue-600 mt-0.5">{best_4g}</p>
           </div>
         )}
         {best_5g && (
-          <div className="flex-1 bg-[#F4F6F9] border border-[#D0D7DE] rounded-lg p-2 text-center">
-            <p className="text-[10px] text-[#64748B] uppercase">Meilleur 5G</p>
-            <p className="text-xs font-semibold text-[#2EC4B6] mt-0.5">{best_5g}</p>
+          <div className="flex-1 bg-slate-50 border border-slate-150 rounded-lg p-2 text-center">
+            <p className="text-[10px] text-slate-400 uppercase">Meilleur 5G</p>
+            <p className="text-xs font-semibold text-emerald-600 mt-0.5">{best_5g}</p>
           </div>
         )}
         {ftth_pct != null && (
-          <div className="flex-1 bg-[#F4F6F9] border border-[#D0D7DE] rounded-lg p-2 text-center">
-            <p className="text-[10px] text-[#64748B] uppercase">Fibre</p>
-            <p className="text-xs font-semibold text-[#34D399] mt-0.5">{ftth_pct} %</p>
+          <div className="flex-1 bg-slate-50 border border-slate-150 rounded-lg p-2 text-center">
+            <p className="text-[10px] text-slate-400 uppercase">Fibre</p>
+            <p className="text-xs font-semibold text-emerald-600 mt-0.5">{ftth_pct} %</p>
           </div>
         )}
       </div>
@@ -199,13 +199,13 @@ function ConnectivityDetail({ data, loading }) {
       {/* Détail par opérateur (% de part d'antennes dans l'arrondissement) */}
       {operators.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          <p className="text-[10px] text-[#64748B] mb-1">Part des antennes par opérateur (source ARCEP 2025-T4)</p>
+          <p className="text-[10px] text-slate-400 mb-1">Part des antennes par opérateur (source ARCEP 2025-T4)</p>
           {operators.map((op) => (
             <div key={op.operateur} className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1.5 text-[#1E293B] w-32">
+              <span className="flex items-center gap-1.5 text-slate-700 w-32">
                 <span
                   className="material-icon"
-                  style={{ color: OP_ICONS[op.operateur]?.color ?? '#0F4C81' }}
+                  style={{ color: OP_ICONS[op.operateur]?.color ?? '#94A3B8' }}
                 >
                   {OP_ICONS[op.operateur]?.icon ?? 'signal_cellular_alt'}
                 </span>
@@ -213,13 +213,13 @@ function ConnectivityDetail({ data, loading }) {
               </span>
               <div className="flex gap-2">
                 {op.pct_pop_4g != null && (
-                  <span className="text-[#0F4C81]">4G&nbsp;{op.pct_pop_4g}%</span>
+                  <span className="text-blue-600 font-medium">4G&nbsp;{op.pct_pop_4g}%</span>
                 )}
                 {op.pct_pop_5g != null && (
-                  <span className="text-[#2EC4B6]">5G&nbsp;{op.pct_pop_5g}%</span>
+                  <span className="text-emerald-600 font-medium">5G&nbsp;{op.pct_pop_5g}%</span>
                 )}
                 {op.pct_pop_4g == null && op.pct_pop_5g == null && (
-                  <span className="text-[#64748B]">—</span>
+                  <span className="text-slate-400">—</span>
                 )}
               </div>
             </div>
@@ -228,7 +228,7 @@ function ConnectivityDetail({ data, loading }) {
       )}
 
       {operators.length === 0 && !best_4g && ftth_pct == null && (
-        <p className="text-xs text-[#64748B]">Données ARCEP non disponibles — relancer le pipeline</p>
+        <p className="text-xs text-slate-400">Données ARCEP non disponibles — relancer le pipeline</p>
       )}
     </div>
   );
@@ -262,14 +262,14 @@ function MetricsDetail({ data }) {
 
   return (
     <div className="card">
-      <p className="text-xs text-[#64748B] uppercase tracking-wide mb-3">Métriques détaillées</p>
+      <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Métriques détaillées</p>
       <div className="grid grid-cols-2 gap-y-2 gap-x-4">
         {rows.map(({ label, value, icon }) => (
           <div key={label} className="flex items-center gap-1.5">
-            <span className="material-icon text-base">{icon}</span>
+            <span className="material-icon text-base text-slate-400">{icon}</span>
             <div>
-              <p className="text-xs text-[#64748B] leading-tight">{label}</p>
-              <p className="text-sm font-medium text-[#1E293B]">{value}</p>
+              <p className="text-xs text-slate-500 leading-tight">{label}</p>
+              <p className="text-sm font-medium text-slate-800">{value}</p>
             </div>
           </div>
         ))}
@@ -281,10 +281,10 @@ function MetricsDetail({ data }) {
 function Metric({ icon, label, value }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="material-icon text-base">{icon}</span>
+      <span className="material-icon text-base text-slate-400">{icon}</span>
       <div>
-        <p className="text-xs text-[#64748B] leading-tight">{label}</p>
-        <p className="text-sm font-medium text-[#1E293B]">{value}</p>
+        <p className="text-xs text-slate-500 leading-tight">{label}</p>
+        <p className="text-sm font-medium text-slate-800">{value}</p>
       </div>
     </div>
   );

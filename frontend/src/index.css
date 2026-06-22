@@ -7,33 +7,34 @@
   body,
   #root {
     @apply h-full;
-    background-color: #F4F6F9;
-    color: #1E293B;
+    background-color: #F8FAFC;
+    color: #0F172A;
     font-family: 'Inter', system-ui, sans-serif;
   }
 
   * {
-    border-color: #D0D7DE;
+    border-color: #E2E8F0;
   }
 
   ::-webkit-scrollbar {
     @apply w-1.5;
   }
   ::-webkit-scrollbar-track {
-    background-color: #EAEFF5;
+    background-color: #F1F5F9;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: #D0D7DE;
+    background-color: #CBD5E1;
     border-radius: 9999px;
   }
 }
 
 @layer components {
   .card {
-    background-color: #EAEFF5;
-    border: 1px solid #D0D7DE;
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
     border-radius: 0.75rem;
     padding: 1rem;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
   }
 
   .card-hover {
@@ -41,8 +42,8 @@
   }
 
   .card-hover:hover {
-    border-color: #C3CBD5;
-    background-color: #E3E9F2;
+    border-color: #CBD5E1;
+    background-color: #F1F5F9;
   }
 
   .badge {
@@ -59,75 +60,76 @@
 
   .btn-primary {
     @apply text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors;
-    background-color: #0F4C81;
+    background-color: #2563EB;
   }
 
   .btn-primary:hover {
-    background-color: #2EC4B6;
+    background-color: #1D4ED8;
   }
 
   .btn-ghost {
     @apply text-sm px-3 py-1.5 rounded-lg transition-colors;
-    color: #64748B;
+    color: #475569;
   }
 
   .btn-ghost:hover {
-    color: #1E293B;
-    background-color: #E2E8F0;
+    color: #0F172A;
+    background-color: #F1F5F9;
   }
 
   .score-bar-track {
     @apply h-1.5 rounded-full overflow-hidden;
-    background-color: #D0D7DE;
+    background-color: #E2E8F0;
   }
 
   .select-field {
     @apply w-full text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:border-transparent;
-    background-color: #F4F6F9;
-    border: 1px solid #D0D7DE;
-    color: #1E293B;
-    --tw-ring-color: #2EC4B6;
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    color: #0F172A;
+    --tw-ring-color: #2563EB;
   }
 }
 
 /* ── Leaflet overrides (thème light) ────────────────────────── */
 .leaflet-container {
-  background: #EAEFF5;
+  background: #F8FAFC;
   font-family: 'Inter', system-ui, sans-serif;
 }
 
 .leaflet-tooltip-urban {
-  background: rgba(244, 246, 249, 0.96) !important;
-  border: 1px solid #B6C0CC !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  border: 1px solid #CBD5E1 !important;
   border-radius: 8px !important;
-  color: #1E293B !important;
+  color: #0F172A !important;
   font-size: 12px !important;
   padding: 6px 10px !important;
-  box-shadow: 0 12px 20px rgba(30, 41, 59, 0.18) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1) !important;
   backdrop-filter: blur(8px);
 }
 
 .leaflet-tooltip-urban::before {
-  border-top-color: #B6C0CC !important;
+  border-top-color: #CBD5E1 !important;
 }
 
 .leaflet-control-zoom a {
-  background: #F4F6F9 !important;
-  color: #64748B !important;
-  border-color: #D0D7DE !important;
+  background: #FFFFFF !important;
+  color: #475569 !important;
+  border-color: #E2E8F0 !important;
 }
 
 .leaflet-control-zoom a:hover {
-  background: #E2E8F0 !important;
-  color: #1E293B !important;
+  background: #F1F5F9 !important;
+  color: #0F172A !important;
 }
 
 .leaflet-control-attribution {
-  background: rgba(244, 246, 249, 0.85) !important;
-  color: #64748B !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  color: #475569 !important;
   font-size: 10px !important;
 }
 
 .leaflet-control-attribution a {
-  color: #0F4C81 !important;
+  color: #2563EB !important;
 }
+

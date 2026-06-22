@@ -133,7 +133,7 @@ export default function InteractiveMap({
     return {
       fillColor:   indicatorColor(selectedIndicator, value, allValues),
       fillOpacity: isSelected ? 0.88 : 0.72,
-      color:       isSelected ? '#0F4C81' : '#9AA6B2',
+      color:       isSelected ? '#2563EB' : '#CBD5E1',
       weight:      isSelected ? 3 : 1.25,
     };
   }
@@ -147,7 +147,7 @@ export default function InteractiveMap({
       layer.setStyle({
         fillColor:   indicatorColor(selectedIndicator, value, allValues),
         fillOpacity: isSelected ? 0.88 : 0.72,
-        color:       isSelected ? '#0F4C81' : '#9AA6B2',
+        color:       isSelected ? '#2563EB' : '#CBD5E1',
         weight:      isSelected ? 3 : 1.25,
       });
     });
@@ -164,13 +164,13 @@ export default function InteractiveMap({
     });
     layer.on('mouseover', () => {
       if (arrondissement !== selectedArrondissement)
-        layer.setStyle({ fillOpacity: 0.86, weight: 2.25, color: '#2EC4B6' });
+        layer.setStyle({ fillOpacity: 0.86, weight: 2.25, color: '#2563EB' });
     });
     layer.on('mouseout', () => {
       const isSel = arrondissement === selectedArrondissement;
       layer.setStyle({
         fillOpacity: isSel ? 0.88 : 0.72,
-        color:       isSel ? '#0F4C81' : '#9AA6B2',
+        color:       isSel ? '#2563EB' : '#CBD5E1',
         weight:      isSel ? 3 : 1.25,
       });
     });
@@ -195,7 +195,7 @@ export default function InteractiveMap({
   function onEachQuartierFeature(feature, layer) {
     const nom = feature.properties?.l_qu ?? feature.properties?.libelle ?? 'Quartier';
     // fillOpacity minuscule pour rendre la zone cliquable partout
-    layer.setStyle({ fillColor: '#2EC4B6', fillOpacity: 0.03 });
+    layer.setStyle({ fillColor: '#2563EB', fillOpacity: 0.03 });
 
     layer.on('click', async (e) => {
       L.DomEvent.stopPropagation(e); // empêche le clic arrondissement
@@ -207,11 +207,11 @@ export default function InteractiveMap({
       );
     });
 
-    layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.18, color: '#0F4C81' }));
-    layer.on('mouseout',  () => layer.setStyle({ fillOpacity: 0.03, color: '#2EC4B6' }));
+    layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.18, color: '#2563EB' }));
+    layer.on('mouseout',  () => layer.setStyle({ fillOpacity: 0.03, color: '#2563EB' }));
 
     layer.bindTooltip(
-      `<div style="font-size:11px;color:#0F4C81;font-weight:600">
+      `<div style="font-size:11px;color:#2563EB;font-weight:600">
          <span class="map-icon" style="font-size:14px;vertical-align:-2px;margin-right:4px">pin_drop</span>
          ${nom}
        </div>
@@ -247,7 +247,7 @@ export default function InteractiveMap({
 
       {/* Badge quartiers actifs */}
       {selectedArrondissement && quartiersFiltered && (
-        <div className="absolute bottom-5 right-3 z-[1000] bg-[#F4F6F9]/90 border border-[#2EC4B6]/60 rounded-lg px-2 py-1 text-xs backdrop-blur-sm flex items-center gap-1.5 text-[#0F4C81]">
+        <div className="absolute bottom-5 right-3 z-[1000] bg-white/90 border border-slate-200 rounded-lg px-2 py-1 text-xs backdrop-blur-sm flex items-center gap-1.5 text-slate-800 shadow-sm">
           <span className="map-icon" style={{ fontSize: 14 }}>pin_drop</span>
           <span>Quartiers cliquables</span>
         </div>
@@ -279,9 +279,9 @@ export default function InteractiveMap({
             key={`q-${selectedArrondissement}`}
             data={quartiersFiltered}
             style={{
-              fillColor:   '#2EC4B6',
+              fillColor:   '#2563EB',
               fillOpacity: 0.03,
-              color:       '#2EC4B6',
+              color:       '#2563EB',
               weight:      1.5,
               dashArray:   '6 4',
             }}
@@ -296,7 +296,7 @@ export default function InteractiveMap({
             eventHandlers={{ remove: () => setQuartierPopup(null) }}
           >
             <div style={{ minWidth: 180 }}>
-              <p style={{ fontWeight: 700, marginBottom: 4, color: '#0F4C81' }}>
+              <p style={{ fontWeight: 700, marginBottom: 4, color: '#2563EB' }}>
                 <span
                   className="map-icon"
                   style={{ fontSize: 16, verticalAlign: '-2px', marginRight: 4 }}
@@ -374,8 +374,8 @@ function ColorLegend({ indicatorId }) {
   const isPrice = LOWER_BETTER.has(indicatorId);
 
   return (
-    <div className="absolute bottom-5 left-3 z-[1000] bg-[#F4F6F9]/95 border border-[#B6C0CC] rounded-lg px-3 py-2 text-xs backdrop-blur-sm">
-      <p className="text-[#64748B] mb-1.5 font-medium flex items-center gap-1.5">
+    <div className="absolute bottom-5 left-3 z-[1000] bg-white/95 border border-slate-200 rounded-lg px-3 py-2 text-xs backdrop-blur-sm shadow-sm">
+      <p className="text-slate-500 mb-1.5 font-medium flex items-center gap-1.5">
         <span className="material-icon text-base" style={{ verticalAlign: '-3px' }}>
           {icon}
         </span>
@@ -383,14 +383,14 @@ function ColorLegend({ indicatorId }) {
       </p>
       <div className="flex items-center gap-1.5">
         <div
-          className="w-16 h-2 rounded-full"
+          className="w-20 h-2 rounded-full"
           style={{
             background: isPrice
-              ? 'linear-gradient(to right, #00A3FF, #0F3B81)'
-              : 'linear-gradient(to right, #0F3B81, #1974D2, #00A3FF)',
+              ? 'linear-gradient(to right, #10B981, #84CC16, #FACC15, #F97316, #EF4444)'
+              : 'linear-gradient(to right, #EF4444, #F97316, #FACC15, #84CC16, #10B981)',
           }}
         />
-        <span className="text-[#64748B]">{isPrice ? 'Bas → Élevé' : '0 → 100'}</span>
+        <span className="text-slate-500">{isPrice ? 'Bas → Élevé' : '0 → 100'}</span>
       </div>
     </div>
   );

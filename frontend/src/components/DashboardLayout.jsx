@@ -51,14 +51,14 @@ export default function DashboardLayout({
       <div className="flex flex-col flex-1 overflow-hidden">
 
         {/* Header */}
-        <header className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-[#D0D7DE] bg-[#F4F6F9]">
+        <header className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-white">
           <div>
-            <h1 className="text-base font-bold text-[#0F3B81]">
+            <h1 className="text-base font-bold text-slate-800">
               {selectedArrondissement
                 ? `Paris ${selectedArrondissement}e arrondissement`
                 : 'Paris — Vue globale'}
             </h1>
-            <p className="text-xs text-[#64748B]">
+            <p className="text-xs text-slate-500">
               Analyse de la qualité de vie
             </p>
           </div>
@@ -66,11 +66,11 @@ export default function DashboardLayout({
           {/* Controls migrated from the sidebar: indicator selector + chantiers toggle */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <label className="text-xs text-[#64748B] mr-2">Indicateur</label>
+              <label className="text-xs text-slate-500 mr-2">Indicateur</label>
               <select
                 value={selectedIndicator}
                 onChange={(e) => onIndicatorChange(e.target.value)}
-                className="text-sm px-2 py-1 border rounded-md bg-white text-[#0F3B81]"
+                className="text-sm px-2 py-1 border border-slate-200 rounded-md bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 {INDICATOR_OPTIONS.map((opt) => (
                   <option key={opt.id} value={opt.id}>{opt.label}</option>
@@ -80,7 +80,7 @@ export default function DashboardLayout({
 
             <button
               onClick={() => setShowChantiers((v) => !v)}
-              className={`px-3 py-1 rounded-md text-sm border transition-colors ${showChantiers ? 'bg-[#00A3FF]/15 text-[#0F3B81] border-[#00A3FF]/40' : 'text-[#64748B] hover:text-[#0F3B81]'}`}
+              className={`px-3 py-1 rounded-md text-sm border transition-colors ${showChantiers ? 'bg-blue-50 text-blue-600 border-blue-200' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 border-slate-200'}`}
             >
               <span className="material-icon align-middle mr-1">construction</span>
               Chantiers
