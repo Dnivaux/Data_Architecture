@@ -112,7 +112,12 @@ class ArrondissementScorer:
     # ------------------------------------------------------------------
 
     def score_anime(self) -> pd.DataFrame:
-        """Densité bars + nightclubs + parcs (OSM). Score 0-100."""
+        """
+        Dynamisme de quartier 0-100.
+        Composantes pondérées (OSM) :
+          restaurant (30%) + bar (20%) + cinema (20%) + park (15%)
+          + nightclub (10%) + stadium (5%)
+        """
         osm_df = read_parquet("osm")
         if osm_df.empty or self.boundaries_gdf.empty:
             self.logger.warning("Données OSM ou boundaries absentes pour score animé")
@@ -134,17 +139,33 @@ class ArrondissementScorer:
             .unstack(fill_value=0)
             .reset_index()
         )
-        for col in ["bar", "nightclub", "park"]:
+        for col in ["bar", "nightclub", "park", "cinema", "restaurant", "stadium"]:
             if col not in counts.columns:
                 counts[col] = 0
 
-        counts["total_poi"] = counts["bar"] + counts["nightclub"] + counts["park"]
-        counts["anime_score"] = _normalize(counts["total_poi"]).round(1)
+        # Normalisation individuelle de chaque composante avant pondération
+        s_restaurant = _normalize(counts["restaurant"])
+        s_bar        = _normalize(counts["bar"])
+        s_cinema     = _normalize(counts["cinema"])
+        s_park       = _normalize(counts["park"])
+        s_nightclub  = _normalize(counts["nightclub"])
+        s_stadium    = _normalize(counts["stadium"])
+
+        counts["anime_score"] = (
+            0.30 * s_restaurant
+            + 0.20 * s_bar
+            + 0.20 * s_cinema
+            + 0.15 * s_park
+            + 0.10 * s_nightclub
+            + 0.05 * s_stadium
+        ).round(1)
+
         counts = counts.rename(columns={
-            "bar": "bar_count", "nightclub": "nightclub_count", "park": "park_count"
+            "bar": "bar_count", "nightclub": "nightclub_count", "park": "park_count",
+            "cinema": "cinema_count", "restaurant": "restaurant_count", "stadium": "stadium_count",
         })
-        return counts[["arrondissement", "bar_count", "nightclub_count",
-                        "park_count", "total_poi", "anime_score"]]
+        return counts[["arrondissement", "bar_count", "nightclub_count", "park_count",
+                        "cinema_count", "restaurant_count", "stadium_count", "anime_score"]]
 
     def score_calme(self) -> pd.DataFrame:
         """

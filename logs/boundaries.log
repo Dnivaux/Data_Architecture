@@ -25,3 +25,6 @@
 2026-05-22T22:53:14 [INFO] boundaries — Boundaries ingestion started
 2026-05-22T22:53:14 [INFO] boundaries — Raw GeoJSON saved → /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/boundaries/arrondissements.geojson
 2026-05-22T22:53:14 [INFO] boundaries — Saved 20 arrondissements → /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/boundaries/part-0.parquet
+2026-06-22T09:39:55 [INFO] boundaries — Boundaries ingestion started
+2026-06-22T09:39:55 [INFO] boundaries — Raw GeoJSON saved → /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/boundaries/arrondissements.geojson
+2026-06-22T09:39:55 [INFO] boundaries — Saved 20 arrondissements → /Users/daenivaux/Desktop/EFREI/Projet DATA Architecture/Data_Architecture/data/bronze/boundaries/part-0.parquet

@@ -18,6 +18,13 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
   const [comparisonScore, setComparisonScore] = useState(null);
   const [comparing, setComparing] = useState(false);
 
+  // Prix DVF de l'arrondissement comparé (pour superposer la 2ᵉ courbe).
+  const compareId = compareWith ? parseInt(compareWith, 10) : null;
+  const { prices: comparePrices } = usePrices(compareId);
+
+  const labelA = selectedArrondissement ? `Paris ${selectedArrondissement}e` : 'Paris (moy.)';
+  const labelB = compareWith ? `Paris ${compareWith}e` : undefined;
+
   useEffect(() => {
     setCompareWith('');
     setComparisonScore(null);
@@ -72,14 +79,22 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
 
       {/* Radar Chart */}
       <div className="card">
-        <p className="text-xs text-[#64748B] uppercase tracking-wide mb-1">
-          Profil des scores
-        </p>
+        <div className="flex items-start justify-between mb-1">
+          <p className="text-xs text-[#64748B] uppercase tracking-wide">
+            Profil des scores
+          </p>
+          {comparisonScore && (
+            <div className="flex items-center gap-3 shrink-0">
+              <GlobalScoreBadge label={labelA} value={scoreData?.livability_score} color="#0F4C81" />
+              <GlobalScoreBadge label={labelB} value={comparisonScore?.livability_score} color="#2EC4B6" />
+            </div>
+          )}
+        </div>
         <RadarScoreChart
           primary={scoreData}
           secondary={comparisonScore}
-          labelA={selectedArrondissement ? `Paris ${selectedArrondissement}e` : 'Paris (moy.)'}
-          labelB={compareWith ? `Paris ${compareWith}e` : undefined}
+          labelA={labelA}
+          labelB={labelB}
         />
         {comparing && (
           <p className="text-xs text-[#64748B] text-center mt-1 animate-pulse">
@@ -99,7 +114,13 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
             </span>
           </div>
         ) : (
-          <PriceLineChart prices={prices} loading={pricesLoading} />
+          <PriceLineChart
+            prices={prices}
+            comparePrices={compareId ? comparePrices : null}
+            labelA={labelA}
+            labelB={labelB}
+            loading={pricesLoading}
+          />
         )}
       </div>
 
@@ -110,6 +131,18 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
 
       {/* Métriques brutes (si arrondissement sélectionné) */}
       {indicatorData && <MetricsDetail data={indicatorData} />}
+    </div>
+  );
+}
+
+/** Badge « score global » (livability) affiché en haut à droite du radar en comparaison. */
+function GlobalScoreBadge({ label, value, color }) {
+  return (
+    <div className="text-right leading-tight">
+      <p className="text-[10px] uppercase tracking-wide" style={{ color }}>{label}</p>
+      <p className="text-sm font-semibold" style={{ color }}>
+        {value != null ? `${value.toFixed(1)} / 100` : '—'}
+      </p>
     </div>
   );
 }

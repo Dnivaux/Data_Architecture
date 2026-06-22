@@ -398,3 +398,37 @@ requests.exceptions.ConnectionError: HTTPSConnectionPool(host='overpass.private.
 2026-05-22T22:53:19 [INFO] pipeline — ✓ air_quality   OK — 40 rows (0.1s)
 2026-05-22T22:53:19 [INFO] pipeline — ✓ crime         OK — 3,000 rows (3.3s)
 2026-05-22T22:53:19 [INFO] pipeline — ============================================================
+2026-06-22T09:03:22 [INFO] pipeline — ============================================================
+2026-06-22T09:03:22 [INFO] pipeline — Bronze pipeline started at 2026-06-22T07:03:22.692766+00:00
+2026-06-22T09:03:22 [INFO] pipeline — Sources: ['dvf', 'osm', 'boundaries', 'revenus', 'air_quality', 'crime']
+2026-06-22T09:03:22 [INFO] pipeline — ============================================================
+2026-06-22T09:03:22 [INFO] pipeline — 
+>>> Running: DVF
+2026-06-22T09:04:45 [INFO] pipeline — <<< DVF done: 189609 rows in 82.4s
+2026-06-22T09:04:45 [INFO] pipeline — 
+>>> Running: OSM
+2026-06-22T09:39:55 [INFO] pipeline — <<< OSM done: 15866 rows in 2110.5s
+2026-06-22T09:39:55 [INFO] pipeline — 
+>>> Running: BOUNDARIES
+2026-06-22T09:39:55 [INFO] pipeline — <<< BOUNDARIES done: 20 rows in 0.3s
+2026-06-22T09:39:55 [INFO] pipeline — 
+>>> Running: REVENUS
+2026-06-22T09:39:56 [INFO] pipeline — <<< REVENUS done: 992 rows in 0.7s
+2026-06-22T09:39:56 [INFO] pipeline — 
+>>> Running: AIR_QUALITY
+2026-06-22T09:39:58 [INFO] pipeline — <<< AIR_QUALITY done: 20 rows in 2.0s
+2026-06-22T09:39:58 [INFO] pipeline — 
+>>> Running: CRIME
+2026-06-22T09:40:19 [INFO] pipeline — <<< CRIME done: 3000 rows in 20.6s
+2026-06-22T09:40:19 [INFO] pipeline — 
+============================================================
+2026-06-22T09:40:19 [INFO] pipeline — Pipeline finished at 2026-06-22T07:40:19.199843+00:00 (2216.5s total)
+2026-06-22T09:40:19 [INFO] pipeline — SOURCE          RESULT
+2026-06-22T09:40:19 [INFO] pipeline — ------------------------------------------------------------
+2026-06-22T09:40:19 [INFO] pipeline — ✓ dvf           OK — 189,609 rows (82.4s)
+2026-06-22T09:40:19 [INFO] pipeline — ✓ osm           OK — 15,866 rows (2110.5s)
+2026-06-22T09:40:19 [INFO] pipeline — ✓ boundaries    OK — 20 rows (0.3s)
+2026-06-22T09:40:19 [INFO] pipeline — ✓ revenus       OK — 992 rows (0.7s)
+2026-06-22T09:40:19 [INFO] pipeline — ✓ air_quality   OK — 20 rows (2.0s)
+2026-06-22T09:40:19 [INFO] pipeline — ✓ crime         OK — 3,000 rows (20.6s)
+2026-06-22T09:40:19 [INFO] pipeline — ============================================================

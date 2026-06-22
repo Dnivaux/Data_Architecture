@@ -1,11 +1,35 @@
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine,
+  Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { fmtInt } from '../utils/formatters';
 
-/** Graphique linéaire de l'évolution du prix médian DVF (€/m²) par année. */
-export default function PriceLineChart({ prices, loading }) {
+const COLOR_A = '#0F4C81';   // série principale (idem radar primary)
+const COLOR_B = '#2EC4B6';   // série comparée   (idem radar secondary)
+
+/** Tendance (%) entre la première et la dernière valeur non nulle d'une série. */
+function computeTrend(series) {
+  const sorted = [...series].sort((a, b) => a.year - b.year);
+  const first = sorted.find((p) => p.median_price != null);
+  const last = [...sorted].reverse().find((p) => p.median_price != null);
+  if (!first || !last || first === last) return null;
+  return {
+    pct: (((last.median_price - first.median_price) / first.median_price) * 100).toFixed(1),
+    year: first.year,
+  };
+}
+
+/**
+ * Graphique linéaire de l'évolution du prix médian DVF (€/m²) par année.
+ * En mode comparaison, superpose une seconde série (`comparePrices`).
+ */
+export default function PriceLineChart({
+  prices,
+  comparePrices = null,
+  labelA = 'Sélectionné',
+  labelB = 'Comparé',
+  loading,
+}) {
   if (loading) {
     return (
       <div className="h-40 flex items-center justify-center">
@@ -22,28 +46,37 @@ export default function PriceLineChart({ prices, loading }) {
     );
   }
 
-  const sorted = [...prices].sort((a, b) => a.year - b.year);
+  const comparing = comparePrices && comparePrices.length > 0;
 
-  // Calcul de la tendance (dernière vs première valeur)
-  const first = sorted.find((p) => p.median_price != null);
-  const last = [...sorted].reverse().find((p) => p.median_price != null);
-  const trend = first && last && first !== last
-    ? (((last.median_price - first.median_price) / first.median_price) * 100).toFixed(1)
-    : null;
+  // Fusion des deux séries sur l'année pour que recharts lise un seul tableau.
+  const byYear = new Map();
+  prices.forEach((p) => {
+    byYear.set(p.year, { year: p.year, [labelA]: p.median_price ?? null });
+  });
+  if (comparing) {
+    comparePrices.forEach((p) => {
+      const row = byYear.get(p.year) ?? { year: p.year, [labelA]: null };
+      row[labelB] = p.median_price ?? null;
+      byYear.set(p.year, row);
+    });
+  }
+  const merged = Array.from(byYear.values()).sort((a, b) => a.year - b.year);
+
+  const trend = computeTrend(prices);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-[#64748B] uppercase tracking-wide">Prix médian DVF</span>
         {trend && (
-          <span className={`text-xs font-medium ${+trend >= 0 ? 'text-[#0F4C81]' : 'text-[#34D399]'}`}>
-            {+trend >= 0 ? '+' : ''}{trend} % depuis {first?.year}
+          <span className={`text-xs font-medium ${+trend.pct >= 0 ? 'text-[#0F4C81]' : 'text-[#34D399]'}`}>
+            {+trend.pct >= 0 ? '+' : ''}{trend.pct} % depuis {trend.year}
           </span>
         )}
       </div>
 
       <ResponsiveContainer width="100%" height={160}>
-        <LineChart data={sorted} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+        <LineChart data={merged} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#D0D7DE" />
           <XAxis
             dataKey="year"
@@ -66,18 +99,30 @@ export default function PriceLineChart({ prices, loading }) {
               fontSize: 12,
             }}
             labelStyle={{ color: '#1E293B' }}
-            itemStyle={{ color: '#0F4C81' }}
-            formatter={(v) => [`${fmtInt(v)} €/m²`, 'Prix médian']}
+            formatter={(v, name) => [`${fmtInt(v)} €/m²`, name]}
           />
+          {comparing && <Legend wrapperStyle={{ fontSize: 12, color: '#64748B' }} />}
           <Line
             type="monotone"
-            dataKey="median_price"
-            stroke="#0F4C81"
+            dataKey={labelA}
+            stroke={COLOR_A}
             strokeWidth={2}
-            dot={{ fill: '#2EC4B6', r: 3 }}
+            dot={{ fill: COLOR_B, r: 3 }}
             activeDot={{ r: 5 }}
             connectNulls
           />
+          {comparing && (
+            <Line
+              type="monotone"
+              dataKey={labelB}
+              stroke={COLOR_B}
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              dot={{ fill: COLOR_A, r: 3 }}
+              activeDot={{ r: 5 }}
+              connectNulls
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>

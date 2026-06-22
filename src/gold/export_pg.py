@@ -104,6 +104,11 @@ CREATE TABLE IF NOT EXISTS gold_arrondissement_summary (
     median_price            REAL,
     bar_count               INTEGER,
     park_count              INTEGER,
+    -- Métriques animation / dynamisme (OSM)
+    nightclub_count         INTEGER,
+    cinema_count            INTEGER,
+    restaurant_count        INTEGER,
+    stadium_count           INTEGER,
     -- Métadonnées
     updated_at              TIMESTAMPTZ
 );

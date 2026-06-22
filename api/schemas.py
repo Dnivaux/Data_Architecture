@@ -33,6 +33,9 @@ class ArrondissementScore(BaseModel):
     bar_count:           int            = Field(0, description="Nombre de bars (OSM)")
     nightclub_count:     int            = Field(0, description="Nombre de boîtes de nuit (OSM)")
     park_count:          int            = Field(0, description="Nombre de parcs (OSM)")
+    cinema_count:        int            = Field(0, description="Nombre de cinémas (OSM)")
+    restaurant_count:    int            = Field(0, description="Nombre de restaurants (OSM)")
+    stadium_count:       int            = Field(0, description="Nombre de stades/salles de sport (OSM)")
     median_price:            Optional[float] = Field(None, description="Prix médian DVF (€/m²)")
     social_housing_pct:      Optional[float] = Field(None, description="% logements sociaux (déprécié)")
     nombre_logements_sociaux: Optional[int]  = Field(None, description="Nb logements sociaux (stock total)")
@@ -90,6 +93,11 @@ class ArrondissementDetail(BaseModel):
     noise_lden_surface_ha: Optional[float] = Field(None, description="Surface exposée Lden ≥55dB (ha)")
     nb_bars:             Optional[int]   = None
     nb_nightclubs:       Optional[int]   = None
+
+    # Métriques clés animation / dynamisme
+    cinema_count:        Optional[int]   = Field(None, description="Nb cinémas (OSM)")
+    restaurant_count:    Optional[int]   = Field(None, description="Nb restaurants (OSM)")
+    stadium_count:       Optional[int]   = Field(None, description="Nb stades/salles de sport (OSM)")
 
     # Prix
     median_price:        Optional[float] = Field(None, description="Prix médian DVF (€)")
