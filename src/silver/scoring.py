@@ -67,6 +67,25 @@ def _normalize(series: pd.Series, invert: bool = False) -> pd.Series:
     return (100.0 - normalized) if invert else normalized
 
 
+def _rank_normalize(series: pd.Series, invert: bool = False) -> pd.Series:
+    """
+    Normalisation par RANG sur [0, 100] (percentile).
+    Le plus faible → 0, le plus fort → 100, répartition régulière (médiane ~50).
+    Contrairement au min-max, insensible aux distributions asymétriques : un seul
+    arrondissement « hors-norme » ne tasse plus tous les autres vers le bas.
+    Si invert=True, le rang est inversé (valeur haute → score bas).
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    if s.notna().sum() <= 1:
+        return pd.Series(50.0, index=series.index)
+    ranks = s.rank(method="average")  # moyenne des ex-aequo
+    lo, hi = ranks.min(), ranks.max()
+    if hi == lo:
+        return pd.Series(50.0, index=series.index)
+    normalized = (ranks - lo) / (hi - lo) * 100.0
+    return ((100.0 - normalized) if invert else normalized).round(1)
+
+
 def _read_silver(filename: str) -> pd.DataFrame:
     """Charge une table Silver Parquet. Retourne DataFrame vide si absente."""
     path = SILVER_ROOT / filename
@@ -120,9 +139,14 @@ class ArrondissementScorer:
     def score_anime(self) -> pd.DataFrame:
         """
         Dynamisme de quartier 0-100.
-        Composantes pondérées (OSM) :
+        Composantes pondérées (OSM, chacune min-max) :
           restaurant (30%) + bar (20%) + cinema (20%) + park (15%)
           + nightclub (10%) + stadium (5%)
+
+        Le mélange pondéré sert à classer les arrondissements ; le score final est
+        ensuite normalisé par RANG (percentile) → médiane ~50, plus animé = 100.
+        Évite l'effet de tassement du min-max sur des comptages très asymétriques
+        (ex : le 11e concentre les bars et écrasait tous les autres vers le bas).
         """
         osm_df = read_parquet("osm")
         if osm_df.empty or self.boundaries_gdf.empty:
@@ -157,14 +181,17 @@ class ArrondissementScorer:
         s_nightclub  = _normalize(counts["nightclub"])
         s_stadium    = _normalize(counts["stadium"])
 
-        counts["anime_score"] = (
+        # Mélange pondéré (composantes déjà min-max) → score relatif brut…
+        _anime_blend = (
             0.30 * s_restaurant
             + 0.20 * s_bar
             + 0.20 * s_cinema
             + 0.15 * s_park
             + 0.10 * s_nightclub
             + 0.05 * s_stadium
-        ).round(1)
+        )
+        # …puis normalisation par rang pour une échelle intuitive (médiane ~50, top = 100)
+        counts["anime_score"] = _rank_normalize(_anime_blend)
 
         counts = counts.rename(columns={
             "bar": "bar_count", "nightclub": "nightclub_count", "park": "park_count",
