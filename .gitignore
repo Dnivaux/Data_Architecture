@@ -43,4 +43,9 @@ logs/*.log
 .DS_Store
 Thumbs.db
 
+# --- Logs ---
 logs/
+
+# --- Parquet files ---
+*.parquet
+**/*.parquet
