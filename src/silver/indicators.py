@@ -142,6 +142,23 @@ def _sjoin_to_arrondissement(
     return df
 
 
+def _pollen_risk_level(total: float | None) -> str | None:
+    """Niveau de risque pollinique à partir du pic total (grains/m³).
+
+    Mêmes seuils que l'ingestion Open-Meteo, recalculés ici sur la moyenne
+    par arrondissement (métrique détaillée — n'alimente aucun score).
+    """
+    if total is None or pd.isna(total):
+        return None
+    if total < 10:
+        return "Faible"
+    if total < 50:
+        return "Modéré"
+    if total < 150:
+        return "Élevé"
+    return "Très élevé"
+
+
 def _commune_to_arrondissement(commune_code: pd.Series) -> pd.Series:
     """Cas 1 — extrait l'arrondissement depuis le code INSEE parisien (75101→1)."""
     codes = commune_code.astype(str).str.strip()
@@ -490,7 +507,8 @@ def build_health_env_silver(
     Schéma sortant
     --------------
     arrondissement, nb_ilots_fraicheur, surface_fraicheur_ha,
-    nb_arbres, arbres_per_km2, avg_atmo_index, computed_at
+    nb_arbres, arbres_per_km2, european_aqi, avg_atmo_index,
+    pollen_total, pollen_risk, computed_at
     """
     log = logger or get_logger("silver.health_env", LOG_DIR)
     computed_at = datetime.now(timezone.utc)
@@ -500,9 +518,11 @@ def build_health_env_silver(
     if boundaries_gdf is None or boundaries_gdf.empty:
         boundaries_gdf = _load_boundaries_gdf(log)
 
-    # --- Qualité de l'air Citeair (Bronze air_quality — directement par arrondissement) ---
+    # --- Qualité de l'air + pollen (Bronze air_quality — Open-Meteo, par arrondissement) ---
+    # european_aqi  → alimente le score Santé Environnementale (via scoring.py)
+    # pollen_total / pollen_risk → métriques détaillées uniquement (aucun score)
     df_air = read_parquet("air_quality")
-    if not df_air.empty and {"arrondissement", "indice_atmo_num"}.issubset(df_air.columns):
+    if not df_air.empty and "arrondissement" in df_air.columns:
         df_air["arrondissement"] = pd.to_numeric(df_air["arrondissement"], errors="coerce")
         # Convertir code INSEE 75101-75120 → int 1-20 si besoin
         mask_insee = df_air["arrondissement"] > 100
@@ -511,21 +531,39 @@ def build_health_env_silver(
         df_air = df_air[df_air["arrondissement"].between(1, 20)]
         df_air["arrondissement"] = df_air["arrondissement"].astype(int)
 
-        air_agg = (
-            df_air.groupby("arrondissement")["indice_atmo_num"]
-            .mean()
-            .round(1)
-            .reset_index(name="avg_atmo_index")
-        )
-        base = base.merge(air_agg, on="arrondissement", how="left")
-        log.info(
-            "Qualité air Citeair : %d arrondissements (indice moyen=%.1f)",
-            air_agg["arrondissement"].nunique(),
-            air_agg["avg_atmo_index"].mean(),
-        )
+        # Agrégats selon le schéma Bronze disponible (Open-Meteo fournit european_aqi + pollen ;
+        # les anciennes partitions Airparif n'ont qu'indice_atmo_num → moyenne NaN-safe).
+        agg_spec: dict[str, tuple[str, str]] = {}
+        if "european_aqi" in df_air.columns:
+            agg_spec["european_aqi"] = ("european_aqi", "mean")
+        if "indice_atmo_num" in df_air.columns:
+            agg_spec["avg_atmo_index"] = ("indice_atmo_num", "mean")
+        if "pollen_total" in df_air.columns:
+            agg_spec["pollen_total"] = ("pollen_total", "mean")
+
+        if agg_spec:
+            air_agg = df_air.groupby("arrondissement").agg(**agg_spec).reset_index()
+            for col in ("european_aqi", "avg_atmo_index", "pollen_total"):
+                if col in air_agg.columns:
+                    air_agg[col] = pd.to_numeric(air_agg[col], errors="coerce").round(1)
+            # Risque pollinique dérivé du pic moyen (métrique détaillée)
+            if "pollen_total" in air_agg.columns:
+                air_agg["pollen_risk"] = air_agg["pollen_total"].apply(_pollen_risk_level)
+            base = base.merge(air_agg, on="arrondissement", how="left")
+            log.info(
+                "Qualité air : %d arrondissements (european_aqi=%s, pollen=%s)",
+                air_agg["arrondissement"].nunique(),
+                "oui" if "european_aqi" in air_agg.columns else "non",
+                "oui" if "pollen_total" in air_agg.columns else "non",
+            )
+        else:
+            log.warning("Bronze air_quality sans colonne air exploitable — colonnes air à NA")
+            for col in ["european_aqi", "avg_atmo_index", "pollen_total", "pollen_risk"]:
+                base[col] = pd.NA
     else:
-        log.warning("Bronze air_quality vide ou mal formé — avg_atmo_index à NA")
-        base["avg_atmo_index"] = pd.NA
+        log.warning("Bronze air_quality vide ou mal formé — colonnes air à NA")
+        for col in ["european_aqi", "avg_atmo_index", "pollen_total", "pollen_risk"]:
+            base[col] = pd.NA
 
     # --- Îlots de fraîcheur (cas 3 : colonne arrondissement int déjà présente) ---
     df_ilots = read_parquet("paris_ilots_fraicheur")

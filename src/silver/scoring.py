@@ -11,7 +11,7 @@ Scores historiques (révisés pour éviter la duplication) :
 Nouveaux scores stratégiques :
   - score_connectivity   : fibre + 4G/5G + ratio T2-T3
   - score_mobility       : transports ICAR par mode (60%) + densité stations Vélib' (40%)
-  - score_health_env     : végétalisation (30%) + arbres (30%) + îlots (20%) + air_quality (20%)
+  - score_health_env     : air_quality (40%) + végétalisation (25%) + arbres (20%) + îlots (15%)
   - score_tranquility    : inverse (crime 40% + bruit 35% + bars/clubs 25%)
 
 Changements v2 (2026-05-21) :
@@ -271,11 +271,14 @@ class ArrondissementScorer:
     def score_health_env(self) -> pd.DataFrame:
         """
         Score Santé Environnementale 0-100.
-        Composantes : surface_fraicheur_ha (30%), arbres_per_km2 (30%),
-                      nb_ilots_fraicheur (20%), avg_atmo_index Citeair (20%).
+        Composantes : qualité de l'air european_aqi (40% — facteur dominant),
+                      surface_fraicheur_ha (25%), arbres_per_km2 (20%),
+                      nb_ilots_fraicheur (15%).
 
-        avg_atmo_index : indice Citeair moyen [0-100+] agrégé par arrondissement
-        dans le Silver health_env. invert=True → score élevé = air pur.
+        european_aqi : indice européen Open-Meteo [0-100+] agrégé par arrondissement
+        dans le Silver health_env (0 = excellent). invert=True → air pur = score élevé.
+        Repli sur avg_atmo_index (Citeair) si european_aqi indisponible.
+        Le pollen n'entre PAS dans le score (métrique détaillée uniquement).
         """
         df = _read_silver("health_env_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -291,21 +294,27 @@ class ArrondissementScorer:
         s_arbres  = _normalize(base.get("arbres_per_km2",       pd.Series([0.0]*20)))
         s_ilots   = _normalize(base.get("nb_ilots_fraicheur",   pd.Series([0.0]*20)))
 
-        # Qualité air Citeair — avg_atmo_index agrégé dans le Silver health_env
-        # invert=True : Citeair bas (0) = bon air = score haut (100)
-        if "avg_atmo_index" in base.columns:
-            s_air = _normalize(base["avg_atmo_index"], invert=True)
+        # Qualité de l'air — european_aqi (Open-Meteo, 0 = excellent) agrégé en Silver.
+        # invert=True : european_aqi bas = bon air = score haut. Repli sur avg_atmo_index.
+        _aqi_vals = pd.to_numeric(base.get("european_aqi"), errors="coerce") \
+            if "european_aqi" in base.columns else pd.Series(dtype=float)
+        if _aqi_vals.notna().any():
+            s_air = _normalize(base["european_aqi"], invert=True)
             self.logger.info(
-                "Score santé : avg_atmo_index min=%.1f max=%.1f",
-                base["avg_atmo_index"].min(),
-                base["avg_atmo_index"].max(),
+                "Score santé : european_aqi min=%.1f max=%.1f",
+                _aqi_vals.min(), _aqi_vals.max(),
             )
+        elif "avg_atmo_index" in base.columns and pd.to_numeric(
+            base["avg_atmo_index"], errors="coerce"
+        ).notna().any():
+            s_air = _normalize(base["avg_atmo_index"], invert=True)
+            self.logger.info("Score santé : repli avg_atmo_index (european_aqi absent)")
         else:
-            self.logger.warning("avg_atmo_index absent du Silver health_env — s_air par défaut 50")
+            self.logger.warning("Aucune métrique air dans Silver health_env — s_air par défaut 50")
             s_air = pd.Series([50.0] * len(base))
 
         base["health_env_score"] = (
-            0.30 * s_surface + 0.30 * s_arbres + 0.20 * s_ilots + 0.20 * s_air
+            0.40 * s_air + 0.25 * s_surface + 0.20 * s_arbres + 0.15 * s_ilots
         ).round(1)
 
         result_cols = [
@@ -313,6 +322,7 @@ class ArrondissementScorer:
             "surface_fraicheur_ha",
             "arbres_per_km2",
             "nb_ilots_fraicheur",
+            "european_aqi",
             "avg_atmo_index",
             "health_env_score",
         ]
