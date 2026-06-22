@@ -235,57 +235,96 @@ function ConnectivityDetail({ data, loading }) {
 }
 
 function MetricsDetail({ data }) {
-  const rows = [
-    { label: "Prix m² médian DVF", value: fmtPrice(data.median_price), icon: 'home' },
-    { label: "Logements sociaux", value: fmtInt(data.nombre_logements_sociaux), icon: 'apartment' },
-    { label: "Éligibles fibre", value: data.pct_eligible_ftth != null ? `${Math.round(data.pct_eligible_ftth)}%` : '—', icon: 'signal_wifi_4_bar' },
-    { label: "Couv. 4G/5G (débit moy.)", value: data.avg_rate_dl_5g_mbps != null ? `${Math.round(data.avg_rate_dl_5g_mbps)} Mbps` : '—', icon: 'phone_iphone' },
-    { label: "Stations Vélib'", value: fmtInt(data.station_count_velib), icon: 'directions_bike' },
-    { label: 'Vélos dispos (moy.)',  value: data.avg_bikes_available != null ? `${data.avg_bikes_available?.toFixed(1)}` : '—', icon: 'sync' },
-    { label: 'Stations métro', value: fmtInt(data.metro_count), icon: 'subway' },
-    { label: 'Gares RER',      value: fmtInt(data.rer_count),   icon: 'train' },
-    { label: 'Arrêts tram',    value: fmtInt(data.tram_count),  icon: 'tram' },
-    { label: 'Arrêts bus',     value: fmtInt(data.bus_count),   icon: 'directions_bus' },
-    { label: "Parcs & jardins", value: fmtInt(data.park_count), icon: 'park' },
-    { label: 'Îlots de fraîcheur',  value: fmtInt(data.nb_ilots_fraicheur),     icon: 'ac_unit' },
-    { label: 'Arbres / km²',        value: fmtInt(data.arbres_per_km2),         icon: 'forest' },
-    { label: "Qualité de l'air (AQI)", value: data.european_aqi != null ? `${Math.round(data.european_aqi)}` : '—', icon: 'air' },
-    { label: 'Risque pollen',       value: data.pollen_risk ?? '—',             icon: 'grass' },
-    { label: "Restaurants", value: fmtInt(data.restaurant_count), icon: 'restaurant' },
-    { label: "Bars", value: fmtInt(data.bar_count), icon: 'local_bar' },
-    { label: "Commerces", value: fmtInt(data.shop_count), icon: 'storefront' },
-    { label: 'Crimes & délits (total)',       value: fmtInt(data.crime_count_total),      icon: 'lock' },
-    { label: 'Taux criminalité / 1000 hab.',   value: data.crime_rate_per_1000 != null ? `${data.crime_rate_per_1000?.toFixed(1)}` : '—', icon: 'trending_down' },
-  ].filter((r) => r.value !== '—' && r.value !== 'undefined' && r.value != null);
+  const allMetrics = {
+    median_price: { label: "Prix m² médian DVF", value: fmtPrice(data.median_price), icon: 'home' },
+    nombre_logements_sociaux: { label: "Logements sociaux", value: fmtInt(data.nombre_logements_sociaux), icon: 'apartment' },
+    pct_eligible_ftth: { label: "Éligibles fibre", value: data.pct_eligible_ftth != null ? `${Math.round(data.pct_eligible_ftth)}%` : null, icon: 'signal_wifi_4_bar' },
+    avg_rate_dl_5g_mbps: { label: "Couv. 5G (débit)", value: data.avg_rate_dl_5g_mbps != null ? `${Math.round(data.avg_rate_dl_5g_mbps)} Mbps` : null, icon: 'phone_iphone' },
+    station_count_velib: { label: "Stations Vélib'", value: fmtInt(data.station_count_velib), icon: 'directions_bike' },
+    avg_bikes_available: { label: "Vélos dispos (moy.)", value: data.avg_bikes_available != null ? `${data.avg_bikes_available?.toFixed(1)}` : null, icon: 'sync' },
+    metro_count: { label: "Stations métro", value: fmtInt(data.metro_count), icon: 'subway' },
+    rer_count: { label: "Gares RER", value: fmtInt(data.rer_count), icon: 'train' },
+    tram_count: { label: "Arrêts tram", value: fmtInt(data.tram_count), icon: 'tram' },
+    bus_count: { label: "Arrêts bus", value: fmtInt(data.bus_count), icon: 'directions_bus' },
+    park_count: { label: "Parcs & jardins", value: fmtInt(data.park_count), icon: 'park' },
+    nb_ilots_fraicheur: { label: "Îlots de fraîcheur", value: fmtInt(data.nb_ilots_fraicheur), icon: 'ac_unit' },
+    arbres_per_km2: { label: "Arbres / km²", value: fmtInt(data.arbres_per_km2), icon: 'forest' },
+    european_aqi: { label: "Qualité de l'air (AQI)", value: data.european_aqi != null ? `${Math.round(data.european_aqi)}` : null, icon: 'air' },
+    pollen_risk: { label: "Risque pollen", value: data.pollen_risk, icon: 'grass' },
+    restaurant_count: { label: "Restaurants", value: fmtInt(data.restaurant_count), icon: 'restaurant' },
+    bar_count: { label: "Bars", value: fmtInt(data.bar_count), icon: 'local_bar' },
+    shop_count: { label: "Commerces", value: fmtInt(data.shop_count), icon: 'storefront' },
+    crime_count_total: { label: "Crimes & délits", value: fmtInt(data.crime_count_total), icon: 'lock' },
+    crime_rate_per_1000: { label: "Taux / 1000 hab.", value: data.crime_rate_per_1000 != null ? `${data.crime_rate_per_1000?.toFixed(1)}` : null, icon: 'trending_down' },
+  };
 
-  if (rows.length === 0) return null;
+  const categories = [
+    {
+      title: "Logement & Immobilier",
+      icon: "home",
+      keys: ["median_price", "nombre_logements_sociaux", "pct_eligible_ftth"],
+      bgColor: "bg-blue-50/50 border-blue-100/70",
+      textColor: "text-blue-700"
+    },
+    {
+      title: "Mobilité & Transports",
+      icon: "directions_bike",
+      keys: ["station_count_velib", "avg_bikes_available", "metro_count", "rer_count", "tram_count", "bus_count"],
+      bgColor: "bg-emerald-50/50 border-emerald-100/70",
+      textColor: "text-emerald-700"
+    },
+    {
+      title: "Nature & Cadre de vie",
+      icon: "eco",
+      keys: ["park_count", "nb_ilots_fraicheur", "arbres_per_km2", "european_aqi", "pollen_risk"],
+      bgColor: "bg-teal-50/50 border-teal-100/70",
+      textColor: "text-teal-700"
+    },
+    {
+      title: "Commerce & Quartier",
+      icon: "storefront",
+      keys: ["restaurant_count", "bar_count", "shop_count"],
+      bgColor: "bg-amber-50/50 border-amber-100/70",
+      textColor: "text-amber-700"
+    },
+    {
+      title: "Sécurité & Prévention",
+      icon: "shield",
+      keys: ["crime_count_total", "crime_rate_per_1000"],
+      bgColor: "bg-rose-50/50 border-rose-100/70",
+      textColor: "text-rose-700"
+    }
+  ];
 
   return (
-    <div className="card">
-      <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Métriques détaillées</p>
-      <div className="grid grid-cols-2 gap-y-2 gap-x-4">
-        {rows.map(({ label, value, icon }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <span className="material-icon text-base text-slate-400">{icon}</span>
-            <div>
-              <p className="text-xs text-slate-500 leading-tight">{label}</p>
-              <p className="text-sm font-medium text-slate-800">{value}</p>
+    <div className="flex flex-col gap-3">
+      {categories.map((cat) => {
+        const activeRows = cat.keys
+          .map((k) => allMetrics[k])
+          .filter((m) => m && m.value !== null && m.value !== '—' && m.value !== undefined);
+
+        if (activeRows.length === 0) return null;
+
+        return (
+          <div key={cat.title} className={`card p-3 border ${cat.bgColor}`}>
+            <p className={`text-[10px] font-bold ${cat.textColor} uppercase tracking-wider mb-2 flex items-center gap-1.5`}>
+              <span className="material-icon text-sm">{cat.icon}</span>
+              {cat.title}
+            </p>
+            <div className="grid grid-cols-2 gap-y-2 gap-x-3">
+              {activeRows.map(({ label, value, icon }) => (
+                <div key={label} className="flex items-center gap-1.5 min-w-0">
+                  <span className="material-icon text-base text-slate-400 shrink-0">{icon}</span>
+                  <div className="min-w-0">
+                    <p className="text-[9px] text-slate-500 leading-tight truncate">{label}</p>
+                    <p className="text-xs font-bold text-slate-800 leading-normal mt-0.5">{value}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Metric({ icon, label, value }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="material-icon text-base text-slate-400">{icon}</span>
-      <div>
-        <p className="text-xs text-slate-500 leading-tight">{label}</p>
-        <p className="text-sm font-medium text-slate-800">{value}</p>
-      </div>
+        );
+      })}
     </div>
   );
 }
