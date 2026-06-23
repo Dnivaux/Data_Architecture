@@ -66,6 +66,7 @@ area["name"="Paris"]["admin_level"="8"]->.paris;
 (
   node[{tag_filter}](area.paris);
   way[{tag_filter}](area.paris);
+  relation[{tag_filter}](area.paris);
 );
 out center tags;
 """
@@ -104,6 +105,7 @@ def _build_query(tag_filter: str) -> str:
 (
   node[{tag_filter}]({OSM_BBOX});
   way[{tag_filter}]({OSM_BBOX});
+  relation[{tag_filter}]({OSM_BBOX});
 );
 out center tags;""".strip()
     else:
@@ -163,9 +165,11 @@ def _fetch_combined_amenities(
         if OSM_USE_BBOX:
             query_parts.append(f"  node[{tag_filter}]({OSM_BBOX});")
             query_parts.append(f"  way[{tag_filter}]({OSM_BBOX});")
+            query_parts.append(f"  relation[{tag_filter}]({OSM_BBOX});")
         else:
             query_parts.append(f"  node[{tag_filter}](area.paris);")
             query_parts.append(f"  way[{tag_filter}](area.paris);")
+            query_parts.append(f"  relation[{tag_filter}](area.paris);")
 
     query_body = "\n".join(query_parts)
     
@@ -232,7 +236,11 @@ def _classify_element(element: dict, allowed_types: list[str]) -> str | None:
         if leisure in ("park", "stadium"):
             return leisure
 
-    # 3. Check shop tag
+    # 3. Check tourism tag (museum = tourism="museum", pas une amenity)
+    if "museum" in allowed_types and tags.get("tourism") == "museum":
+        return "museum"
+
+    # 4. Check shop tag
     if "shop" in allowed_types:
         shop = tags.get("shop")
         if shop in ("supermarket", "hypermarket", "convenience", "grocery", "department_store", "mall"):
@@ -251,18 +259,20 @@ def _element_to_row(
     Ways include a 'center' dict; nodes have top-level lat/lon.
     Returns None if coordinates are unavailable.
     """
-    osm_type = element.get("type")  # "node" | "way"
+    osm_type = element.get("type")  # "node" | "way" | "relation"
     tags: dict = element.get("tags", {})
 
     if osm_type == "node":
         lat = element.get("lat")
         lon = element.get("lon")
-    elif osm_type == "way":
+    elif osm_type in ("way", "relation"):
+        # `out center` fournit un centroïde pour les ways ET les relations
+        # (ex. le Louvre, mappé en relation multipolygone).
         center = element.get("center", {})
         lat = center.get("lat")
         lon = center.get("lon")
     else:
-        return None  # relations not handled yet
+        return None
 
     if lat is None or lon is None:
         return None
