@@ -136,9 +136,20 @@ def _sjoin_to_arrondissement(
     if "arrondissement" not in joined.columns:
         logger.warning("sjoin : colonne 'arrondissement' absente du résultat (%s)", list(joined.columns)[:8])
         df["arrondissement"] = pd.NA
-        return df
-
-    df.loc[valid.index, "arrondissement"] = joined["arrondissement"].reindex(valid.index)
+    vals = joined["arrondissement"].reindex(valid.index)
+    vals = vals.astype(object).where(vals.notna(), pd.NA)
+    if "arrondissement" in df.columns:
+        target_dtype = str(df["arrondissement"].dtype)
+        if target_dtype.startswith("string") or target_dtype == "str":
+            vals = vals.apply(
+                lambda x: str(int(x)) if isinstance(x, (int, float)) and pd.notna(x) else (str(x) if pd.notna(x) else pd.NA)
+            )
+        else:
+            try:
+                vals = vals.astype(df["arrondissement"].dtype)
+            except Exception:
+                pass
+    df.loc[valid.index, "arrondissement"] = vals
     return df
 
 
@@ -211,7 +222,20 @@ def _sjoin_points_to_iris(
     for col in join_cols:
         right = col if col in joined.columns else f"{col}_right"
         if right in joined.columns:
-            df.loc[valid.index, col] = joined[right].reindex(valid.index)
+            vals = joined[right].reindex(valid.index)
+            vals = vals.astype(object).where(vals.notna(), pd.NA)
+            if col in df.columns:
+                target_dtype = str(df[col].dtype)
+                if target_dtype.startswith("string") or target_dtype == "str":
+                    vals = vals.apply(
+                        lambda x: str(int(x)) if isinstance(x, (int, float)) and pd.notna(x) else (str(x) if pd.notna(x) else pd.NA)
+                    )
+                else:
+                    try:
+                        vals = vals.astype(df[col].dtype)
+                    except Exception:
+                        pass
+            df.loc[valid.index, col] = vals
     if "code_iris" not in df.columns:
         df["code_iris"] = pd.NA
     if "arrondissement" not in df.columns:
