@@ -140,7 +140,10 @@ def get_all_iris(db: Session = Depends(get_db)) -> list[IrisDetail]:
     description="Scores et métriques d'un IRIS précis (code INSEE 9 chiffres). Fallback Parquet si PG hors ligne.",
 )
 def get_iris(
-    code_iris: str = Path(..., min_length=5, max_length=12, description="Code IRIS INSEE"),
+    code_iris: str = Path(
+        ..., min_length=5, max_length=12, pattern=r"^\d{5,12}$",
+        description="Code IRIS INSEE (chiffres uniquement)",
+    ),
     db: Session = Depends(get_db),
 ) -> IrisDetail:
     # --- Tentative PostgreSQL ---

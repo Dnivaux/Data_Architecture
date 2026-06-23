@@ -4,6 +4,8 @@ Source : PostgreSQL table gold_arrondissement_summary.
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -11,6 +13,8 @@ from sqlalchemy.orm import Session
 from api.dependencies import get_db
 from api.routers.scores import _row_to_score
 from api.schemas import ArrondissementComparison
+
+logger = logging.getLogger("api.comparison")
 
 router = APIRouter(prefix="/comparison", tags=["comparison"])
 
@@ -62,7 +66,10 @@ def compare_arrondissements(
             {"a": a, "b": b},
         ).mappings().all()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
+        # Ne PAS exposer l'exception brute au client (fuite d'info : schéma,
+        # versions, chemins). On log côté serveur, message générique côté client.
+        logger.error("GET /comparison — erreur base de données : %s", exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service de données indisponible")
 
     row_map = {int(r["arrondissement"]): r for r in rows}
 
@@ -143,6 +150,9 @@ def get_ranking(
             ORDER BY {score_field} DESC NULLS LAST
         """)).mappings().all()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
+        # Ne PAS exposer l'exception brute au client (fuite d'info : schéma,
+        # versions, chemins). On log côté serveur, message générique côté client.
+        logger.error("GET /comparison — erreur base de données : %s", exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service de données indisponible")
 
     return [dict(row) for row in rows]

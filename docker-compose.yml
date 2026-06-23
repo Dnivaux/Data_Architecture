@@ -41,9 +41,11 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/urbandata
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DB: urbandata
-      API_KEYS: ${API_KEYS:-dev-key-123}
+      APP_ENV: ${APP_ENV:-development}                 # production → auth obligatoire + docs masqués + HSTS
+      API_KEYS: ${API_KEYS:-dev-key-123}               # ⚠️ définir des clés robustes hors dev
       RATE_LIMIT: ${RATE_LIMIT:-120/minute}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}               # restreindre au(x) domaine(s) servi(s) en prod
     ports:
       - "8000:8000"
     depends_on:

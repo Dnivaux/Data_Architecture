@@ -23,6 +23,7 @@ de l'API sont faciles à comprendre et à intégrer ».
 """
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 
@@ -31,6 +32,10 @@ from fastapi import Header, HTTPException, Request, status
 
 load_dotenv()
 logger = logging.getLogger("api.security")
+
+# Environnement d'exécution : "development" (défaut) ou "production".
+# En production, l'absence de clés d'API fait échouer le démarrage (fail-closed).
+APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 
 # ---------------------------------------------------------------------------
 # 1) Authentification par clé d'API
@@ -50,26 +55,50 @@ if not API_KEYS:
     )
 
 
+def is_valid_api_key(candidate: str | None) -> bool:
+    """Vérifie une clé d'API en temps constant (anti timing-attack).
+
+    Compare la clé candidate à chaque clé valide via `hmac.compare_digest`,
+    SANS court-circuit (`any(...)` early-exit), pour ne pas révéler par le
+    temps de réponse combien de caractères correspondent.
+    """
+    if not candidate:
+        return False
+    valid = False
+    for key in API_KEYS:
+        if hmac.compare_digest(candidate, key):
+            valid = True  # pas de `return` → temps constant
+    return valid
+
+
+def enforce_startup_security() -> None:
+    """Garde-fou « fail-closed » à appeler au démarrage de l'application.
+
+    En production (`APP_ENV=production`), refuse de démarrer si aucune clé
+    d'API n'est configurée : on ne veut JAMAIS d'API ouverte en prod par oubli.
+    """
+    if APP_ENV == "production" and not API_KEYS:
+        raise RuntimeError(
+            "APP_ENV=production mais API_KEYS est vide — démarrage refusé "
+            "(fail-closed). Définir API_KEYS=clé1,clé2 pour activer l'auth."
+        )
+
+
 async def require_api_key(x_api_key: str | None = Header(default=None)) -> str:
     """
     Dépendance FastAPI : vérifie l'en-tête `X-API-Key`.
 
     - Auth désactivée (aucune clé configurée) → laisse passer (`"anonymous"`).
-    - Clé manquante / invalide → HTTP 401 avec message explicite.
+    - Clé manquante / invalide → HTTP 401 (message générique, sans distinguer
+      « manquante » de « invalide » pour ne pas faciliter l'énumération).
     """
     if not API_KEYS:
         return "anonymous"
 
-    if not x_api_key:
+    if not is_valid_api_key(x_api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Clé d'API manquante. Ajoutez l'en-tête 'X-API-Key'.",
-            headers={"WWW-Authenticate": "ApiKey"},
-        )
-    if x_api_key not in API_KEYS:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Clé d'API invalide.",
+            detail="Clé d'API manquante ou invalide. Fournissez l'en-tête 'X-API-Key'.",
             headers={"WWW-Authenticate": "ApiKey"},
         )
     return x_api_key
