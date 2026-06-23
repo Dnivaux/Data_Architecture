@@ -155,8 +155,8 @@ class ArrondissementScorer:
         """
         Dynamisme de quartier 0-100.
         Composantes pondérées (OSM, chacune min-max) :
-          restaurant (30%) + bar (20%) + cinema (20%) + park (15%)
-          + nightclub (10%) + stadium (5%)
+          restaurant (25%) + bar (20%) + cinema (15%) + park (15%)
+          + nightclub (10%) + musée (10%) + stadium (5%)
 
         Le mélange pondéré sert à classer les arrondissements ; le score final est
         ensuite normalisé par RANG (percentile) → médiane ~50, plus animé = 100.
@@ -184,7 +184,7 @@ class ArrondissementScorer:
             .unstack(fill_value=0)
             .reset_index()
         )
-        for col in ["bar", "nightclub", "park", "cinema", "restaurant", "stadium"]:
+        for col in ["bar", "nightclub", "park", "cinema", "restaurant", "stadium", "museum"]:
             if col not in counts.columns:
                 counts[col] = 0
 
@@ -194,15 +194,17 @@ class ArrondissementScorer:
         s_cinema     = _normalize(counts["cinema"])
         s_park       = _normalize(counts["park"])
         s_nightclub  = _normalize(counts["nightclub"])
+        s_museum     = _normalize(counts["museum"])
         s_stadium    = _normalize(counts["stadium"])
 
         # Mélange pondéré (composantes déjà min-max) → score relatif brut…
         _anime_blend = (
-            0.30 * s_restaurant
+            0.25 * s_restaurant
             + 0.20 * s_bar
-            + 0.20 * s_cinema
+            + 0.15 * s_cinema
             + 0.15 * s_park
             + 0.10 * s_nightclub
+            + 0.10 * s_museum
             + 0.05 * s_stadium
         )
         # …puis normalisation par rang pour une échelle intuitive (médiane ~50, top = 100)
@@ -211,9 +213,11 @@ class ArrondissementScorer:
         counts = counts.rename(columns={
             "bar": "bar_count", "nightclub": "nightclub_count", "park": "park_count",
             "cinema": "cinema_count", "restaurant": "restaurant_count", "stadium": "stadium_count",
+            "museum": "museum_count",
         })
         return counts[["arrondissement", "bar_count", "nightclub_count", "park_count",
-                        "cinema_count", "restaurant_count", "stadium_count", "anime_score"]]
+                        "cinema_count", "restaurant_count", "stadium_count", "museum_count",
+                        "anime_score"]]
 
     def score_calme(self) -> pd.DataFrame:
         """
@@ -480,23 +484,25 @@ class IrisScorer:
     def score_anime(self) -> pd.DataFrame:
         df = self._merge_base(_read_silver("amenities_by_iris.parquet"))
         for col in ["bar_count", "nightclub_count", "park_count",
-                    "cinema_count", "restaurant_count", "stadium_count"]:
+                    "cinema_count", "restaurant_count", "stadium_count", "museum_count"]:
             if col not in df.columns:
                 df[col] = 0
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
         # Normalisation par RANG (percentile) à chaque composante puis sur le mélange
         # → scores étalés 0-100, robustes aux distributions très asymétriques.
         blend = (
-            0.30 * _rank_fill(df["restaurant_count"])
+            0.25 * _rank_fill(df["restaurant_count"])
             + 0.20 * _rank_fill(df["bar_count"])
-            + 0.20 * _rank_fill(df["cinema_count"])
+            + 0.15 * _rank_fill(df["cinema_count"])
             + 0.15 * _rank_fill(df["park_count"])
             + 0.10 * _rank_fill(df["nightclub_count"])
+            + 0.10 * _rank_fill(df["museum_count"])
             + 0.05 * _rank_fill(df["stadium_count"])
         )
         df["anime_score"] = _rank_normalize(blend)
         return df[["code_iris", "bar_count", "nightclub_count", "park_count",
-                   "cinema_count", "restaurant_count", "stadium_count", "anime_score"]]
+                   "cinema_count", "restaurant_count", "stadium_count", "museum_count",
+                   "anime_score"]]
 
     def score_connectivity(self) -> pd.DataFrame:
         df = self._merge_base(_read_silver("connectivity_by_iris.parquet"))

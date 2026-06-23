@@ -118,7 +118,7 @@ def build_amenities_by_iris(iris_gdf: gpd.GeoDataFrame, logger: logging.Logger) 
     """Comptage des POI OSM par IRIS (sjoin point→polygone).
 
     Produit une colonne par type d'aménité utile au scoring d'animation :
-    bar, nightclub, park, cinema, restaurant, stadium.
+    bar, nightclub, park, cinema, restaurant, stadium, museum.
     """
     osm = read_parquet("osm")
     if osm.empty or {"latitude", "longitude", "amenity_type"} - set(osm.columns):
@@ -132,15 +132,16 @@ def build_amenities_by_iris(iris_gdf: gpd.GeoDataFrame, logger: logging.Logger) 
         joined.groupby(["code_iris", "amenity_type"]).size()
         .unstack(fill_value=0).reset_index()
     )
-    for col in ["bar", "nightclub", "park", "cinema", "restaurant", "stadium"]:
+    for col in ["bar", "nightclub", "park", "cinema", "restaurant", "stadium", "museum"]:
         if col not in counts.columns:
             counts[col] = 0
     counts = counts.rename(columns={
         "bar": "bar_count", "nightclub": "nightclub_count", "park": "park_count",
         "cinema": "cinema_count", "restaurant": "restaurant_count", "stadium": "stadium_count",
+        "museum": "museum_count",
     })
     keep = ["code_iris", "bar_count", "nightclub_count", "park_count",
-            "cinema_count", "restaurant_count", "stadium_count"]
+            "cinema_count", "restaurant_count", "stadium_count", "museum_count"]
     counts["granularite"] = "iris"
     return counts[keep + ["granularite"]]
 

@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS gold_arrondissement_summary (
     cinema_count            INTEGER,
     restaurant_count        INTEGER,
     stadium_count           INTEGER,
+    museum_count            INTEGER,
     -- Métadonnées
     updated_at              TIMESTAMPTZ
 );
@@ -190,6 +191,7 @@ CREATE TABLE IF NOT EXISTS gold_iris_summary (
     cinema_count            INTEGER,
     restaurant_count        INTEGER,
     stadium_count           INTEGER,
+    museum_count            INTEGER,
     -- Mobilité
     station_count_velib     REAL,
     transit_stop_count      REAL,

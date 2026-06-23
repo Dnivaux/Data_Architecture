@@ -409,8 +409,11 @@ function MetricsDetail({ data }) {
     european_aqi: { label: "Qualité de l'air (AQI)", value: data.european_aqi != null ? `${Math.round(data.european_aqi)}` : null, icon: 'air' },
     pollen_risk: { label: "Risque pollen", value: data.pollen_risk, icon: 'grass' },
     restaurant_count: { label: "Restaurants", value: fmtInt(data.restaurant_count), icon: 'restaurant' },
-    bar_count: { label: "Bars", value: fmtInt(data.bar_count), icon: 'local_bar' },
-    shop_count: { label: "Commerces", value: fmtInt(data.shop_count), icon: 'storefront' },
+    nb_bars: { label: "Bars", value: fmtInt(data.nb_bars ?? data.bar_count), icon: 'local_bar' },
+    cinema_count: { label: "Cinémas", value: fmtInt(data.cinema_count), icon: 'theaters' },
+    nb_nightclubs: { label: "Boîtes de nuit", value: fmtInt(data.nb_nightclubs ?? data.nightclub_count), icon: 'nightlife' },
+    museum_count: { label: "Musées", value: fmtInt(data.museum_count), icon: 'museum' },
+    stadium_count: { label: "Stades & salles de sport", value: fmtInt(data.stadium_count), icon: 'stadium' },
     crime_count_total: { label: "Crimes & délits", value: fmtInt(data.crime_count_total), icon: 'lock' },
     crime_rate_per_1000: { label: "Taux / 1000 hab.", value: data.crime_rate_per_1000 != null ? `${data.crime_rate_per_1000?.toFixed(1)}` : null, icon: 'trending_down' },
   };
@@ -438,9 +441,9 @@ function MetricsDetail({ data }) {
       textColor: "text-teal-700"
     },
     {
-      title: "Commerce & Quartier",
-      icon: "storefront",
-      keys: ["restaurant_count", "bar_count", "shop_count"],
+      title: "Dynamisme & Sorties",
+      icon: "nightlife",
+      keys: ["restaurant_count", "nb_bars", "cinema_count", "nb_nightclubs", "museum_count", "stadium_count"],
       bgColor: "bg-amber-50/50 border-amber-100/70",
       textColor: "text-amber-700"
     },

@@ -84,6 +84,7 @@ def _build_detail_from_row(row) -> ArrondissementDetail:
         cinema_count=_safe(row, "cinema_count", int),
         restaurant_count=_safe(row, "restaurant_count", int),
         stadium_count=_safe(row, "stadium_count", int),
+        museum_count=_safe(row, "museum_count", int),
         median_price=_safe(row, "median_price"),
         nombre_logements_sociaux=_safe(row, "nombre_logements_sociaux", int),
     )
@@ -106,6 +107,7 @@ def _build_score_from_row(row) -> ArrondissementScore:
         cinema_count=int(_safe(row, "cinema_count", int) or 0),
         restaurant_count=int(_safe(row, "restaurant_count", int) or 0),
         stadium_count=int(_safe(row, "stadium_count", int) or 0),
+        museum_count=int(_safe(row, "museum_count", int) or 0),
         median_price=_safe(row, "median_price"),
         social_housing_pct=None,
         nombre_logements_sociaux=_safe(row, "nombre_logements_sociaux", int),
@@ -142,6 +144,7 @@ def get_all_scores(db: Session = Depends(get_db)) -> list[ArrondissementScore]:
                     COALESCE(cinema_count,     0)::int AS cinema_count,
                     COALESCE(restaurant_count, 0)::int AS restaurant_count,
                     COALESCE(stadium_count,    0)::int AS stadium_count,
+                    COALESCE(museum_count,     0)::int AS museum_count,
                     median_price, nombre_logements_sociaux
                 FROM gold_arrondissement_summary ORDER BY arrondissement
             """)
@@ -184,7 +187,7 @@ def get_indicator_scores(db: Session = Depends(get_db)) -> list[ArrondissementDe
                     m.european_aqi, m.pollen_total, m.pollen_risk,
                     m.crime_count_total,   m.crime_rate_per_1000, m.noise_lden_surface_ha,
                     m.nb_bars, m.nb_nightclubs,
-                    m.cinema_count, m.restaurant_count, m.stadium_count,
+                    m.cinema_count, m.restaurant_count, m.stadium_count, m.museum_count,
                     m.median_price,
                     m.nombre_logements_sociaux
                 FROM gold_indicator_scores s
@@ -229,6 +232,7 @@ def get_arrondissement_score(
                     COALESCE(cinema_count,     0)::int AS cinema_count,
                     COALESCE(restaurant_count, 0)::int AS restaurant_count,
                     COALESCE(stadium_count,    0)::int AS stadium_count,
+                    COALESCE(museum_count,     0)::int AS museum_count,
                     median_price
                 FROM gold_arrondissement_summary WHERE arrondissement = :arr
             """),

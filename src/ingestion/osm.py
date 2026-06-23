@@ -69,6 +69,7 @@ AMENITY_FILTERS: dict[str, str] = {
     "bar": 'amenity="bar"',
     "cinema": 'amenity="cinema"',
     "college": 'amenity="college"',
+    "museum": 'tourism="museum"',
     "nightclub": 'amenity="nightclub"',
     "park": 'leisure="park"',
     "restaurant": 'amenity="restaurant"',
