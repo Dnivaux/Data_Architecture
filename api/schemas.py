@@ -105,6 +105,37 @@ class ArrondissementDetail(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Scores IRIS (grain primaire ~992 zones)
+# ---------------------------------------------------------------------------
+
+class IrisDetail(BaseModel):
+    """
+    Vue détaillée d'un IRIS : scores + métriques brutes + géométrie WKT.
+    Grain primaire de l'application (l'arrondissement reste dimension parente).
+    Utilisée pour la choroplèthe infra-arrondissement sur carte.
+    """
+
+    code_iris:           str            = Field(..., description="Code IRIS INSEE 9 chiffres")
+    arrondissement:      Optional[int]  = Field(None, ge=1, le=20, description="Arrondissement parent")
+    nom_iris:            Optional[str]  = Field(None, description="Libellé IRIS")
+    geometry_wkt:        Optional[str]  = Field(None, description="Polygone WKT EPSG:4326")
+
+    # Scores (normalisés sur ~992 IRIS)
+    anime_score:         Optional[float] = None
+    connectivity_score:  Optional[float] = None
+    mobility_score:      Optional[float] = None
+    health_env_score:    Optional[float] = None
+    tranquility_score:   Optional[float] = None
+    livability_score:    Optional[float] = None
+
+    # Métriques brutes IRIS-natives (fortement discriminantes)
+    median_price:        Optional[float] = Field(None, description="Prix médian DVF (€/m²)")
+    median_income:       Optional[float] = Field(None, description="Revenu médian disponible INSEE (€)")
+    gini_coefficient:    Optional[float] = Field(None, description="Indice de Gini")
+    poverty_rate:        Optional[float] = Field(None, description="Taux de pauvreté (%)")
+
+
+# ---------------------------------------------------------------------------
 # POI
 # ---------------------------------------------------------------------------
 

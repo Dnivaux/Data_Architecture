@@ -6,6 +6,7 @@ from .revenus import ingest as ingest_revenus
 from .open_meteo_air import ingest as ingest_air_quality
 from .crime import ingest as ingest_crime
 from .boundaries import ingest as ingest_boundaries
+from .iris_boundaries import ingest as ingest_iris_boundaries
 
 # Nouveaux indicateurs stratégiques
 from .connectivity import ingest as ingest_connectivity
@@ -21,6 +22,7 @@ __all__ = [
     "ingest_air_quality",
     "ingest_crime",
     "ingest_boundaries",
+    "ingest_iris_boundaries",
     # Nouveaux indicateurs (Bronze statique)
     "ingest_connectivity",
     "ingest_health_environment",

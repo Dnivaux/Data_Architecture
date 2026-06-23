@@ -1,0 +1,17 @@
+# ============================================================
+# Urban Data Explorer — image Airflow (orchestrateur du pipeline)
+# Étend l'image officielle Airflow et installe les libs data du
+# pipeline (pandas, geopandas, shapely…). LocalExecutor.
+# ============================================================
+FROM apache/airflow:2.9.3-python3.11
+
+# Dépendances système géospatiales (geopandas/shapely → libgeos)
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgeos-c1v5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Installation des dépendances Python du pipeline (sous l'utilisateur airflow)
+USER airflow
+COPY requirements-airflow.txt /requirements-airflow.txt
+RUN pip install --no-cache-dir -r /requirements-airflow.txt
