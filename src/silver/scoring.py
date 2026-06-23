@@ -155,8 +155,8 @@ class ArrondissementScorer:
         """
         Dynamisme de quartier 0-100.
         Composantes pondérées (OSM, chacune min-max) :
-          restaurant (25%) + bar (20%) + cinema (15%) + park (15%)
-          + nightclub (10%) + musée (10%) + stadium (5%)
+          musée (25%) + bar (20%) + cinema (15%) + park (15%)
+          + nightclub (10%) + restaurant (10%) + stadium (5%)
 
         Le mélange pondéré sert à classer les arrondissements ; le score final est
         ensuite normalisé par RANG (percentile) → médiane ~50, plus animé = 100.
@@ -199,12 +199,12 @@ class ArrondissementScorer:
 
         # Mélange pondéré (composantes déjà min-max) → score relatif brut…
         _anime_blend = (
-            0.25 * s_restaurant
+            0.25 * s_museum
             + 0.20 * s_bar
             + 0.15 * s_cinema
             + 0.15 * s_park
             + 0.10 * s_nightclub
-            + 0.10 * s_museum
+            + 0.10 * s_restaurant
             + 0.05 * s_stadium
         )
         # …puis normalisation par rang pour une échelle intuitive (médiane ~50, top = 100)
@@ -491,12 +491,12 @@ class IrisScorer:
         # Normalisation par RANG (percentile) à chaque composante puis sur le mélange
         # → scores étalés 0-100, robustes aux distributions très asymétriques.
         blend = (
-            0.25 * _rank_fill(df["restaurant_count"])
+            0.25 * _rank_fill(df["museum_count"])
             + 0.20 * _rank_fill(df["bar_count"])
             + 0.15 * _rank_fill(df["cinema_count"])
             + 0.15 * _rank_fill(df["park_count"])
             + 0.10 * _rank_fill(df["nightclub_count"])
-            + 0.10 * _rank_fill(df["museum_count"])
+            + 0.10 * _rank_fill(df["restaurant_count"])
             + 0.05 * _rank_fill(df["stadium_count"])
         )
         df["anime_score"] = _rank_normalize(blend)
