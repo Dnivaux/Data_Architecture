@@ -1,0 +1,18 @@
+# ============================================================
+# Dépendances installées DANS l'image Airflow (orchestrateur)
+# ------------------------------------------------------------
+# On n'installe QUE les libs nécessaires aux tâches du pipeline
+# (ingestion → silver → gold → export). On évite volontairement
+# fastapi / uvicorn / slowapi / locust (inutiles côté Airflow) et
+# on ne pin PAS SQLAlchemy : Airflow 2.9 fournit sa propre version
+# (<2.0) ; l'export PostgreSQL reste compatible (text(), mappings()).
+# ============================================================
+pandas>=2.0
+pyarrow>=14.0
+geopandas>=0.14
+shapely>=2.0
+requests>=2.31
+urllib3>=2.0
+python-dotenv>=1.0
+psycopg2-binary>=2.9
+pymongo>=4.6

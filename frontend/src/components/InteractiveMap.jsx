@@ -3,7 +3,7 @@ import { MapContainer, GeoJSON, TileLayer, useMap, CircleMarker, Popup } from 'r
 import L from 'leaflet';
 import wellknown from 'wellknown';
 import { indicatorColor } from '../utils/scoreColors';
-import { INDICATOR_OPTIONS } from './Sidebar';
+import { INDICATOR_OPTIONS, IRIS_SUPPORTED_INDICATORS } from './Sidebar';
 
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR =
@@ -49,6 +49,7 @@ function MapViewController({ fitBounds, resetSignal }) {
 // ─────────────────────────────────────────────────────────────────
 export default function InteractiveMap({
   indicators,
+  iris,
   selectedIndicator,
   selectedArrondissement,
   onSelectArrondissement,
@@ -126,10 +127,56 @@ export default function InteractiveMap({
     [indicators, selectedIndicator],
   );
 
+  // ── Couche IRIS (grain fin) — active si l'indicateur existe à l'IRIS ──
+  const irisActive = useMemo(
+    () => IRIS_SUPPORTED_INDICATORS.has(selectedIndicator) && (iris?.length ?? 0) > 0,
+    [iris, selectedIndicator],
+  );
+
+  const irisValues = useMemo(
+    () => iris?.map((d) => d[selectedIndicator]).filter((v) => v != null) ?? [],
+    [iris, selectedIndicator],
+  );
+
+  // GeoJSON IRIS (WKT → Features), optionnellement filtré sur l'arrondissement sélectionné
+  const irisGeoJSON = useMemo(() => {
+    if (!irisActive) return null;
+    const source = selectedArrondissement
+      ? iris.filter((d) => d.arrondissement === selectedArrondissement)
+      : iris;
+    const features = source
+      .map((d) => {
+        if (!d.geometry_wkt) return null;
+        const geometry = wellknown.parse(d.geometry_wkt);
+        if (!geometry) return null;
+        return {
+          type: 'Feature',
+          geometry,
+          properties: {
+            code_iris:      d.code_iris,
+            arrondissement: d.arrondissement,
+            nom:            d.nom_iris,
+            value:          d[selectedIndicator] ?? null,
+          },
+        };
+      })
+      .filter(Boolean);
+    return features.length ? { type: 'FeatureCollection', features } : null;
+  }, [irisActive, iris, selectedIndicator, selectedArrondissement]);
+
   // ── Style choroplèthe arrondissements ─────────────────────────
+  // Quand la couche IRIS est active, l'arrondissement devient un simple contour
+  // de contexte (pas de remplissage), pour laisser voir le détail IRIS.
   function styleFeature(feature) {
     const { arrondissement, value } = feature.properties;
     const isSelected = arrondissement === selectedArrondissement;
+    if (irisActive) {
+      return {
+        fillOpacity: 0,
+        color:       isSelected ? '#1D4ED8' : '#475569',
+        weight:      isSelected ? 3.5 : 1.75,
+      };
+    }
     return {
       fillColor:   indicatorColor(selectedIndicator, value, allValues),
       fillOpacity: isSelected ? 0.88 : 0.72,
@@ -138,12 +185,47 @@ export default function InteractiveMap({
     };
   }
 
+  // ── Style + interactions choroplèthe IRIS ─────────────────────
+  function styleIrisFeature(feature) {
+    const { value } = feature.properties;
+    return {
+      fillColor:   indicatorColor(selectedIndicator, value, irisValues),
+      fillOpacity: 0.78,
+      color:       '#FFFFFF',
+      weight:      0.4,
+    };
+  }
+
+  function onEachIrisFeature(feature, layer) {
+    const { nom, value, arrondissement } = feature.properties;
+    layer.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      if (arrondissement) onSelectArrondissement(arrondissement);
+      setFitBounds(layer.getBounds());
+    });
+    layer.on('mouseover', () => layer.setStyle({ weight: 1.6, color: '#1D4ED8' }));
+    layer.on('mouseout',  () => layer.setStyle({ weight: 0.4, color: '#FFFFFF' }));
+    layer.bindTooltip(
+      `<div style="font-size:12px;font-weight:600">${nom ?? 'IRIS'}</div>
+       <div style="font-size:11px;color:#64748B">${formatIndicatorValue(selectedIndicator, value)}</div>`,
+      { sticky: true, className: 'leaflet-tooltip-urban' },
+    );
+  }
+
   // Re-style sans re-monter (sélection change)
   useEffect(() => {
     if (!geoJSONRef.current) return;
     geoJSONRef.current.eachLayer((layer) => {
       const { arrondissement, value } = layer.feature.properties;
       const isSelected = arrondissement === selectedArrondissement;
+      if (irisActive) {
+        layer.setStyle({
+          fillOpacity: 0,
+          color:       isSelected ? '#1D4ED8' : '#475569',
+          weight:      isSelected ? 3.5 : 1.75,
+        });
+        return;
+      }
       layer.setStyle({
         fillColor:   indicatorColor(selectedIndicator, value, allValues),
         fillOpacity: isSelected ? 0.88 : 0.72,
@@ -151,7 +233,7 @@ export default function InteractiveMap({
         weight:      isSelected ? 3 : 1.25,
       });
     });
-  }, [selectedArrondissement]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedArrondissement, irisActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Interactions arrondissements ──────────────────────────────
   function onEachArrFeature(feature, layer) {
@@ -262,19 +344,32 @@ export default function InteractiveMap({
       >
         <TileLayer url={TILE_URL} attribution={TILE_ATTR} />
 
-        {/* Choroplèthe arrondissements */}
+        {/* Choroplèthe IRIS (grain fin) — peinte sous le contour arrondissement */}
+        {irisActive && irisGeoJSON && (
+          <GeoJSON
+            key={`iris-${selectedIndicator}-${selectedArrondissement ?? 'all'}`}
+            data={irisGeoJSON}
+            style={styleIrisFeature}
+            onEachFeature={onEachIrisFeature}
+          />
+        )}
+
+        {/* Choroplèthe / contour arrondissements.
+            En mode IRIS, ce calque n'est qu'un contour non-interactif : il laisse
+            les clics/survols atteindre les polygones IRIS peints en dessous. */}
         {arrGeoJSON && (
           <GeoJSON
-            key={selectedIndicator}
+            key={`arr-${selectedIndicator}-${irisActive ? 'outline' : 'fill'}`}
             ref={geoJSONRef}
             data={arrGeoJSON}
             style={styleFeature}
+            interactive={!irisActive}
             onEachFeature={onEachArrFeature}
           />
         )}
 
-        {/* Quartiers du drill-down (cliquables pour précision IRIS + BAN) */}
-        {selectedArrondissement && quartiersFiltered && (
+        {/* Quartiers du drill-down (cliquables pour BAN) — uniquement hors mode IRIS */}
+        {!irisActive && selectedArrondissement && quartiersFiltered && (
           <GeoJSON
             key={`q-${selectedArrondissement}`}
             data={quartiersFiltered}

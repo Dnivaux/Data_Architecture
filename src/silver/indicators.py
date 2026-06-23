@@ -142,6 +142,83 @@ def _sjoin_to_arrondissement(
     return df
 
 
+def _load_iris_gdf(logger: logging.Logger) -> gpd.GeoDataFrame:
+    """Charge les polygones IRIS depuis le Bronze iris_boundaries.
+
+    Retourne un GeoDataFrame [code_iris, arrondissement, nom_iris, geometry]
+    en EPSG:4326. Squelette des ~992 IRIS parisiens pour les jointures spatiales.
+    """
+    df = read_parquet("iris_boundaries")
+    if df.empty:
+        logger.error("Bronze iris_boundaries vide — exécuter ingest_iris_boundaries() d'abord")
+        return gpd.GeoDataFrame()
+
+    geom_col = "geometry_wkt" if "geometry_wkt" in df.columns else "geometry"
+    try:
+        geom = gpd.GeoSeries.from_wkt(df[geom_col])
+    except Exception as exc:
+        logger.error("Impossible de parser la géométrie IRIS : %s", exc)
+        return gpd.GeoDataFrame()
+
+    gdf = gpd.GeoDataFrame(df, geometry=geom, crs="EPSG:4326")
+    keep = [c for c in ["code_iris", "arrondissement", "nom_iris"] if c in gdf.columns]
+    logger.info("IRIS chargés : %d polygones", len(gdf))
+    return gdf[keep + ["geometry"]].copy()
+
+
+def _sjoin_points_to_iris(
+    df: pd.DataFrame,
+    lat_col: str,
+    lon_col: str,
+    iris_gdf: gpd.GeoDataFrame,
+    logger: logging.Logger,
+) -> pd.DataFrame:
+    """Jointure spatiale point-dans-polygone IRIS.
+
+    Retourne *df* enrichi des colonnes 'code_iris' et 'arrondissement'.
+    Généralise `_sjoin_to_arrondissement` à la maille IRIS (clé code_iris).
+    """
+    df = df.copy().reset_index(drop=True)
+    # Dédupliquer d'éventuelles colonnes en double (ex. lat/latitude des batches Vélib')
+    df = df.loc[:, ~df.columns.duplicated()]
+    if iris_gdf is None or iris_gdf.empty:
+        logger.warning("iris_gdf vide — sjoin IRIS impossible, code_iris à NA")
+        df["code_iris"] = pd.NA
+        df["arrondissement"] = pd.NA
+        return df
+
+    mask = df[lat_col].notna() & df[lon_col].notna()
+    valid = df[mask].copy()
+    if valid.empty:
+        logger.warning("Aucun point avec coordonnées valides pour le sjoin IRIS")
+        df["code_iris"] = pd.NA
+        df["arrondissement"] = pd.NA
+        return df
+
+    valid_for_join = valid.drop(columns=["code_iris", "arrondissement"], errors="ignore")
+    gdf_pts = gpd.GeoDataFrame(
+        valid_for_join,
+        geometry=gpd.points_from_xy(valid_for_join[lon_col], valid_for_join[lat_col]),
+        crs="EPSG:4326",
+    )
+    join_cols = [c for c in ["code_iris", "arrondissement"] if c in iris_gdf.columns]
+    joined = gpd.sjoin(
+        gdf_pts, iris_gdf[join_cols + ["geometry"]],
+        how="left", predicate="within",
+    )
+    joined = joined[~joined.index.duplicated(keep="first")]
+
+    for col in join_cols:
+        right = col if col in joined.columns else f"{col}_right"
+        if right in joined.columns:
+            df.loc[valid.index, col] = joined[right].reindex(valid.index)
+    if "code_iris" not in df.columns:
+        df["code_iris"] = pd.NA
+    if "arrondissement" not in df.columns:
+        df["arrondissement"] = pd.NA
+    return df
+
+
 def _pollen_risk_level(total: float | None) -> str | None:
     """Niveau de risque pollinique à partir du pic total (grains/m³).
 

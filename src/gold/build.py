@@ -239,6 +239,69 @@ def build_arrondissement_summary(logger: logging.Logger) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Tables IRIS (grain primaire ~992 zones)
+# ---------------------------------------------------------------------------
+
+def _load_iris_wkt(logger: logging.Logger) -> pd.DataFrame:
+    """Charge les polygones IRIS (WKT) depuis le Bronze iris_boundaries."""
+    df = read_parquet("iris_boundaries")
+    if df.empty or "geometry_wkt" not in df.columns:
+        logger.warning("Bronze iris_boundaries vide — geometry_wkt IRIS absente en Gold")
+        return pd.DataFrame(columns=["code_iris", "geometry_wkt"])
+    return df[["code_iris", "geometry_wkt"]].copy()
+
+
+def build_iris_summary(logger: logging.Logger) -> pd.DataFrame:
+    """Table maîtresse IRIS : scores + métriques brutes + géométrie WKT.
+
+    Clé primaire : code_iris. L'arrondissement est conservé comme dimension
+    parente. Inclut `livability_score` composite et les métriques IRIS-natives
+    fortement discriminantes (median_price DVF, median_income INSEE).
+    """
+    scores = _read_silver("scores_by_iris.parquet", logger)
+    if scores.empty:
+        logger.warning("scores_by_iris.parquet absent — iris_summary non construite")
+        return pd.DataFrame()
+
+    base = scores.copy()
+    base["code_iris"] = base["code_iris"].astype(str)
+
+    # Géométrie IRIS
+    iris_wkt = _load_iris_wkt(logger)
+    if not iris_wkt.empty:
+        iris_wkt["code_iris"] = iris_wkt["code_iris"].astype(str)
+        base = base.merge(iris_wkt, on="code_iris", how="left")
+
+    # Score composite de vivabilité (mêmes poids que l'arrondissement)
+    base["livability_score"] = _compute_livability(base)
+    base["updated_at"] = datetime.now(timezone.utc)
+    return base.sort_values(["arrondissement", "code_iris"]).reset_index(drop=True)
+
+
+def build_iris_indicator_scores(logger: logging.Logger) -> pd.DataFrame:
+    """Vue IRIS allégée pour choroplèthes : code_iris + arrondissement + scores + WKT."""
+    summary = _read_silver("scores_by_iris.parquet", logger)
+    if summary.empty:
+        return pd.DataFrame()
+
+    score_cols = [c for c in summary.columns if c.endswith("_score")]
+    keep = ["code_iris", "arrondissement", "nom_iris"] + score_cols + [
+        "median_price", "median_income", "gini_coefficient", "poverty_rate"
+    ]
+    base = summary[[c for c in keep if c in summary.columns]].copy()
+    base["code_iris"] = base["code_iris"].astype(str)
+
+    iris_wkt = _load_iris_wkt(logger)
+    if not iris_wkt.empty:
+        iris_wkt["code_iris"] = iris_wkt["code_iris"].astype(str)
+        base = base.merge(iris_wkt, on="code_iris", how="left")
+
+    base["livability_score"] = _compute_livability(base)
+    base["updated_at"] = datetime.now(timezone.utc)
+    return base.sort_values(["arrondissement", "code_iris"]).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
 # Table 2 — Indicator Scores (vue analytique allégée pour graphiques)
 # ---------------------------------------------------------------------------
 
@@ -359,11 +422,23 @@ def build_gold_layer() -> None:
         _save_gold(timeline, "price_timeline.parquet", logger)
 
     # Série temporelle logements sociaux
-    logger.info(">>> Table 5/5 : social_housing_timeline")
+    logger.info(">>> Table 5/7 : social_housing_timeline")
     sh_timeline = build_social_housing_timeline(logger)
     if not sh_timeline.empty:
         _save_gold(sh_timeline, "social_housing_timeline.parquet", logger)
 
+    # Table maîtresse IRIS (grain primaire ~992 zones)
+    logger.info(">>> Table 6/7 : iris_summary")
+    iris_summary = build_iris_summary(logger)
+    if not iris_summary.empty:
+        _save_gold(iris_summary, "iris_summary.parquet", logger)
+
+    # Vue IRIS allégée (choroplèthes infra-arrondissement)
+    logger.info(">>> Table 7/7 : iris_indicator_scores")
+    iris_scores = build_iris_indicator_scores(logger)
+    if not iris_scores.empty:
+        _save_gold(iris_scores, "iris_indicator_scores.parquet", logger)
+
     logger.info("=" * 60)
-    logger.info("Gold layer complet — %d tables", 5)
+    logger.info("Gold layer complet — %d tables", 7)
     logger.info("=" * 60)

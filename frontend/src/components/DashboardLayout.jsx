@@ -24,6 +24,7 @@ export default function DashboardLayout({
   onIndicatorChange,
   scores,
   indicators,
+  iris,
   scoreMap,
   indicatorMap,
   liveMetrics,
@@ -120,6 +121,7 @@ export default function DashboardLayout({
             <div className="flex-[6] min-w-0">
               <InteractiveMap
                 indicators={indicators}
+                iris={iris}
                 selectedIndicator={selectedIndicator}
                 selectedArrondissement={selectedArrondissement}
                 onSelectArrondissement={onSelectArrondissement}

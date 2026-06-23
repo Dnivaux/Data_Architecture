@@ -35,6 +35,13 @@ export const api = {
     one: (n) => get(`/api/scores/${n}`),
   },
 
+  iris: {
+    /** GET /api/iris/indicators/all → IrisDetail[] (avec geometry_wkt) */
+    indicators: (arrondissement) => get('/api/iris/indicators/all', { arrondissement }),
+    /** GET /api/iris/{code_iris} → IrisDetail */
+    one: (code) => get(`/api/iris/${code}`),
+  },
+
   prices: {
     /** GET /api/prices/arrondissement/{n} → PriceTimeline[] */
     arrondissement: (n) => get(`/api/prices/arrondissement/${n}`),

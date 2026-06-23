@@ -215,6 +215,21 @@ def build_silver_layer() -> None:
     except Exception as exc:
         logger.error("Erreur agrégation logements sociaux : %s", exc, exc_info=True)
 
+    # --- Étape 4 : Couche IRIS (grain primaire) ---
+    # Exécutée APRÈS l'arrondissement : la rediffusion connectivité/santé/
+    # tranquillité lit les tables Silver arrondissement ci-dessus.
+    logger.info(">>> Étape 4/4 : Couche IRIS (grain fin ~992 zones)")
+    try:
+        from .iris_layer import build_iris_silver_layer
+        from .scoring import IrisScorer
+        iris_base = build_iris_silver_layer(logger)
+        if not iris_base.empty:
+            iris_scores = IrisScorer(logger).compute_all_scores()
+            if not iris_scores.empty:
+                _save(iris_scores, "scores_by_iris.parquet", logger)
+    except Exception as exc:
+        logger.error("Erreur couche IRIS : %s", exc, exc_info=True)
+
     elapsed = time.perf_counter() - started
     logger.info("=" * 60)
     logger.info("Silver layer complet (%.1fs)", elapsed)

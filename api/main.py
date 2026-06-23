@@ -32,7 +32,7 @@ from fastapi.responses import JSONResponse
 
 from api.dependencies import get_db_status, verify_db_connection
 from api.routers import (
-    chantiers, comparison, connectivity, live, mobility, poi, prices, scores, social_housing,
+    chantiers, comparison, connectivity, iris, live, mobility, poi, prices, scores, social_housing,
 )
 from api.schemas import HealthCheck, HealthCheckExtended
 from api.security import install_rate_limiting, require_api_key
@@ -161,6 +161,7 @@ app.add_middleware(
 _auth = [Depends(require_api_key)]
 
 app.include_router(scores.router,       prefix="/api", dependencies=_auth)
+app.include_router(iris.router,         prefix="/api", dependencies=_auth)
 app.include_router(poi.router,          prefix="/api", dependencies=_auth)
 app.include_router(prices.router,       prefix="/api", dependencies=_auth)
 app.include_router(comparison.router,   prefix="/api", dependencies=_auth)

@@ -1,6 +1,14 @@
 """
-Planificateur d'ingestion — Urban Data Explorer
+Planificateur d'ingestion — Urban Data Explorer  [DÉPRÉCIÉ]
 ================================================
+⚠️  DÉPRÉCIÉ — remplacé par Apache Airflow (voir dags/ et docker-compose.yml).
+    Lancer plutôt :  docker compose up -d airflow-webserver airflow-scheduler
+    puis ouvrir l'UI http://localhost:8080 (airflow / airflow).
+    Les DAGs urban_data_pipeline / air_quality_refresh / mobility_micro_batch
+    reproduisent à l'identique les cadences ci-dessous via PythonOperator.
+
+    Ce module `schedule` est conservé pour un repli local sans Docker.
+
 Ingestion *planifiée* (attendu consigne : « pipeline d'ingestion planifiée
 permettant de récupérer régulièrement les différentes sources »).
 

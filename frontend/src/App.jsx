@@ -1,6 +1,7 @@
 import { useState, Component } from 'react';
 import DashboardLayout from './components/DashboardLayout';
 import { useScores } from './hooks/useScores';
+import { useIris } from './hooks/useIris';
 import { useLiveMetrics } from './hooks/useLiveMetrics';
 
 export default function App() {
@@ -8,6 +9,7 @@ export default function App() {
   const [selectedIndicator, setSelectedIndicator] = useState('connectivity_score');
 
   const { scores, indicators, scoreMap, indicatorMap, loading, error } = useScores();
+  const { iris } = useIris();
   const liveMetrics = useLiveMetrics();
 
   if (loading) return <LoadingScreen />;
@@ -22,6 +24,7 @@ export default function App() {
         onIndicatorChange={setSelectedIndicator}
         scores={scores}
         indicators={indicators}
+        iris={iris}
         scoreMap={scoreMap}
         indicatorMap={indicatorMap}
         liveMetrics={liveMetrics}
