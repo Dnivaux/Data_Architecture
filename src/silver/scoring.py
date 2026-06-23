@@ -12,7 +12,7 @@ Nouveaux scores stratégiques :
   - score_connectivity   : fibre + 4G/5G + ratio T2-T3
   - score_mobility       : transports ICAR par mode (60%) + densité stations Vélib' (40%)
   - score_health_env     : air_quality (40%) + végétalisation (25%) + arbres (20%) + îlots (15%)
-  - score_tranquility    : inverse (crime 40% + bruit 35% + bars/clubs 25%)
+  - score_tranquility    : inverse (bruit Lden 45% + bruit Ln 25% + bars/clubs 30%)
 
 Changements v2 (2026-05-21) :
   ✓ Suppression de la duplication "crime" entre calme et tranquility
@@ -25,6 +25,12 @@ Changements v3 (2026-06-22) :
     comme métrique brute (median_price) mais ne produit plus de score
   ✓ Mobilité : chaque mode ICAR normalisé séparément (anti-domination RER) ;
     Vélib' réduit au comptage de stations (bornes libres → métrique détaillée)
+
+Changements v4 (2026-06-23) :
+  ✓ Tranquillité : retrait de la criminalité du score, remplacée par le bruit
+    Bruitparif (Lden 45% jour-soir-nuit + Ln 25% nuit) + vie nocturne 30%.
+    La criminalité (crime_count_total, crime_rate_per_1000) reste exposée
+    UNIQUEMENT comme métrique détaillée.
 """
 from __future__ import annotations
 
@@ -376,15 +382,18 @@ class ArrondissementScorer:
 
     def score_tranquility(self) -> pd.DataFrame:
         """
-        Score Tranquillité (Sécurité + Calme + Vie nocturne) v3 — 0-100.
+        Score Tranquillité (Calme sonore + Vie nocturne) v4 — 0-100.
 
         Composantes (inversées : valeur haute = nuisance → score bas) :
-          - criminalité (taux /1000 hab)          → 40%
-          - bruit Lden (surface exposée ≥55 dB)   → 35%  [ancien Calme]
-          - densité bars + boîtes de nuit          → 25%
+          - bruit Lden Bruitparif (surface ≥55 dB jour-soir-nuit) → 45%
+          - bruit Ln  Bruitparif (surface ≥50 dB nuit)            → 25%
+          - densité bars + boîtes de nuit (OSM)                   → 30%
 
-        Score 100 = arrondissement sûr, silencieux, peu de vie nocturne.
-        Score   0 = arrondissement à forte délinquance, bruyant, dense en bars/clubs.
+        La criminalité n'entre PLUS dans le score (conservée uniquement comme
+        métrique détaillée). Le calme repose désormais sur le bruit Bruitparif.
+
+        Score 100 = arrondissement silencieux, peu de vie nocturne.
+        Score   0 = arrondissement bruyant (jour et nuit), dense en bars/clubs.
         """
         df = _read_silver("tranquility_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -395,20 +404,15 @@ class ArrondissementScorer:
 
         base = base.merge(df, on="arrondissement", how="left")
 
-        # Criminalité : taux /1000 hab (corrige la taille de population), avec
-        # repli sur le comptage brut si le taux est absent. Plus bas = plus tranquille.
-        if "crime_rate_per_1000" in base.columns and pd.to_numeric(
-            base["crime_rate_per_1000"], errors="coerce"
-        ).notna().any():
-            s_crime = _normalize(base["crime_rate_per_1000"], invert=True)
-        else:
-            s_crime = _normalize(
-                base.get("crime_count_total", pd.Series([0.0] * 20)), invert=True
-            )
-
-        # Bruit Lden (surface en ha exposée ≥ 55 dB) : plus bas = plus calme
-        s_bruit = _normalize(
+        # Bruit Lden Bruitparif (surface en ha exposée ≥ 55 dB, jour-soir-nuit) :
+        # plus bas = plus calme.
+        s_bruit_lden = _normalize(
             base.get("noise_lden_surface_ha", pd.Series([0.0] * 20)), invert=True
+        )
+        # Bruit Ln Bruitparif (surface en ha exposée ≥ 50 dB la nuit) : pénalise
+        # spécifiquement les nuisances nocturnes, plus impactantes pour le repos.
+        s_bruit_ln = _normalize(
+            base.get("noise_ln_surface_ha", pd.Series([0.0] * 20)), invert=True
         )
 
         # Vie nocturne : bars + nightclubs (OSM). Plus bas = plus tranquille.
@@ -419,11 +423,12 @@ class ArrondissementScorer:
         s_nightlife = _normalize(nightlife, invert=True)
 
         base["tranquility_score"] = (
-            0.40 * s_crime + 0.35 * s_bruit + 0.25 * s_nightlife
+            0.45 * s_bruit_lden + 0.25 * s_bruit_ln + 0.30 * s_nightlife
         ).round(1)
 
         return base[["arrondissement", "crime_count_total", "crime_rate_per_1000",
-                     "noise_lden_surface_ha", "nb_bars", "nb_nightclubs",
+                     "noise_lden_surface_ha", "noise_ln_surface_ha",
+                     "nb_bars", "nb_nightclubs",
                      "tranquility_score"]]
 
     # ------------------------------------------------------------------
@@ -554,22 +559,22 @@ class IrisScorer:
         return df[[c for c in keep if c in df.columns]]
 
     def score_tranquility(self) -> pd.DataFrame:
+        # Tranquillité = calme sonore (Bruitparif Lden + Ln) + vie nocturne.
+        # La criminalité reste en métrique détaillée mais n'entre plus dans le score.
         df = self._merge_base(_read_silver("tranquility_by_iris.parquet"))
-        if "crime_rate_per_1000" in df.columns and pd.to_numeric(df["crime_rate_per_1000"], errors="coerce").notna().any():
-            s_crime = _rank_fill(df["crime_rate_per_1000"], invert=True)
-        else:
-            s_crime = _rank_fill(df.get("crime_count_total"), invert=True)
-        s_bruit = _rank_fill(df.get("noise_lden_surface_ha"), invert=True)
+        s_bruit_lden = _rank_fill(df.get("noise_lden_surface_ha"), invert=True)
+        s_bruit_ln = _rank_fill(df.get("noise_ln_surface_ha"), invert=True)
         nightlife = (
             pd.to_numeric(df.get("nb_bars"), errors="coerce").fillna(0)
             + pd.to_numeric(df.get("nb_nightclubs"), errors="coerce").fillna(0)
         )
         s_nightlife = _rank_fill(nightlife, invert=True)
         df["tranquility_score"] = _rank_normalize(
-            0.40 * s_crime + 0.35 * s_bruit + 0.25 * s_nightlife
+            0.45 * s_bruit_lden + 0.25 * s_bruit_ln + 0.30 * s_nightlife
         )
         keep = ["code_iris", "crime_count_total", "crime_rate_per_1000",
-                "noise_lden_surface_ha", "nb_bars", "nb_nightclubs", "tranquility_score"]
+                "noise_lden_surface_ha", "noise_ln_surface_ha",
+                "nb_bars", "nb_nightclubs", "tranquility_score"]
         return df[[c for c in keep if c in df.columns]]
 
     def compute_all_scores(self) -> pd.DataFrame:
