@@ -11,8 +11,17 @@ const SCORE_AXES = [
   { key: 'health_env_score',    label: 'Santé Env.'   },
 ];
 
-function buildData(score) {
-  return SCORE_AXES.map(({ key, label }) => ({
+// Axes utilisés à la maille IRIS : Connectivité et Santé Env. sont rediffusées
+// depuis l'arrondissement (constantes au sein d'un arrondissement) → inutiles
+// pour comparer deux quartiers. On ne garde que les dimensions qui varient.
+export const IRIS_SCORE_AXES = [
+  { key: 'anime_score',       label: 'Animation'    },
+  { key: 'tranquility_score', label: 'Tranquillité' },
+  { key: 'mobility_score',    label: 'Mobilité'     },
+];
+
+function buildData(score, axes) {
+  return axes.map(({ key, label }) => ({
     subject: label,
     value: score?.[key] != null ? +score[key].toFixed(1) : 0,
     fullMark: 100,
@@ -28,11 +37,11 @@ function buildData(score) {
  *   labelA    : string
  *   labelB    : string
  */
-export default function RadarScoreChart({ primary, secondary, labelA = 'Sélectionné', labelB = 'Comparé' }) {
+export default function RadarScoreChart({ primary, secondary, labelA = 'Sélectionné', labelB = 'Comparé', axes = SCORE_AXES }) {
   if (!primary) return <EmptyState />;
 
-  const dataA = buildData(primary);
-  const dataB = secondary ? buildData(secondary) : null;
+  const dataA = buildData(primary, axes);
+  const dataB = secondary ? buildData(secondary, axes) : null;
 
   // Merge pour que recharts lise un seul tableau
   const merged = dataA.map((d, i) => ({

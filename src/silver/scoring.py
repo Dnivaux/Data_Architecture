@@ -86,6 +86,21 @@ def _rank_normalize(series: pd.Series, invert: bool = False) -> pd.Series:
     return ((100.0 - normalized) if invert else normalized).round(1)
 
 
+def _rank_fill(series: pd.Series, invert: bool = False) -> pd.Series:
+    """Normalisation par RANG, robuste aux NaN.
+
+    `_rank_normalize` laisse les NaN tels quels (rank() ne les classe pas) ;
+    on les remplace d'abord par la médiane (→ rang neutre ~50), comme le fait
+    `_normalize`. Utilisé par le scoring IRIS pour étaler les scores sur 0-100
+    sans subir le tassement min-max dû aux IRIS-hubs extrêmes (centre de Paris).
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    med = s.median()
+    if pd.notna(med):
+        s = s.fillna(med)
+    return _rank_normalize(s, invert=invert)
+
+
 def _read_silver(filename: str) -> pd.DataFrame:
     """Charge une table Silver Parquet. Retourne DataFrame vide si absente."""
     path = SILVER_ROOT / filename
@@ -469,13 +484,15 @@ class IrisScorer:
             if col not in df.columns:
                 df[col] = 0
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        # Normalisation par RANG (percentile) à chaque composante puis sur le mélange
+        # → scores étalés 0-100, robustes aux distributions très asymétriques.
         blend = (
-            0.30 * _normalize(df["restaurant_count"])
-            + 0.20 * _normalize(df["bar_count"])
-            + 0.20 * _normalize(df["cinema_count"])
-            + 0.15 * _normalize(df["park_count"])
-            + 0.10 * _normalize(df["nightclub_count"])
-            + 0.05 * _normalize(df["stadium_count"])
+            0.30 * _rank_fill(df["restaurant_count"])
+            + 0.20 * _rank_fill(df["bar_count"])
+            + 0.20 * _rank_fill(df["cinema_count"])
+            + 0.15 * _rank_fill(df["park_count"])
+            + 0.10 * _rank_fill(df["nightclub_count"])
+            + 0.05 * _rank_fill(df["stadium_count"])
         )
         df["anime_score"] = _rank_normalize(blend)
         return df[["code_iris", "bar_count", "nightclub_count", "park_count",
@@ -483,30 +500,30 @@ class IrisScorer:
 
     def score_connectivity(self) -> pd.DataFrame:
         df = self._merge_base(_read_silver("connectivity_by_iris.parquet"))
-        df["connectivity_score"] = (
-            0.40 * _normalize(df.get("pct_eligible_ftth"))
-            + 0.30 * _normalize(df.get("pct_pop_4g_mean"))
-            + 0.15 * _normalize(df.get("pct_pop_5g_mean"))
-            + 0.15 * _normalize(df.get("pct_t2_t3"))
-        ).round(1)
+        df["connectivity_score"] = _rank_normalize(
+            0.40 * _rank_fill(df.get("pct_eligible_ftth"))
+            + 0.30 * _rank_fill(df.get("pct_pop_4g_mean"))
+            + 0.15 * _rank_fill(df.get("pct_pop_5g_mean"))
+            + 0.15 * _rank_fill(df.get("pct_t2_t3"))
+        )
         keep = ["code_iris", "pct_eligible_ftth", "pct_pop_4g_mean",
                 "pct_pop_5g_mean", "pct_t2_t3", "connectivity_score"]
         return df[[c for c in keep if c in df.columns]]
 
     def score_mobility(self) -> pd.DataFrame:
         df = self._merge_base(_read_silver("mobility_by_iris.parquet"))
-        s_stations = _normalize(pd.to_numeric(df.get("station_count_velib"), errors="coerce").fillna(0))
+        s_stations = _rank_fill(pd.to_numeric(df.get("station_count_velib"), errors="coerce").fillna(0))
         modes = ["metro_count", "rer_count", "tram_count", "bus_count"]
         if all(c in df.columns for c in modes):
             s_transit = (
-                0.40 * _normalize(pd.to_numeric(df["metro_count"], errors="coerce").fillna(0))
-                + 0.25 * _normalize(pd.to_numeric(df["rer_count"], errors="coerce").fillna(0))
-                + 0.20 * _normalize(pd.to_numeric(df["bus_count"], errors="coerce").fillna(0))
-                + 0.15 * _normalize(pd.to_numeric(df["tram_count"], errors="coerce").fillna(0))
+                0.40 * _rank_fill(pd.to_numeric(df["metro_count"], errors="coerce").fillna(0))
+                + 0.25 * _rank_fill(pd.to_numeric(df["rer_count"], errors="coerce").fillna(0))
+                + 0.20 * _rank_fill(pd.to_numeric(df["bus_count"], errors="coerce").fillna(0))
+                + 0.15 * _rank_fill(pd.to_numeric(df["tram_count"], errors="coerce").fillna(0))
             )
         else:
             s_transit = pd.Series([50.0] * len(df), index=df.index)
-        df["mobility_score"] = (0.60 * s_transit + 0.40 * s_stations).round(1)
+        df["mobility_score"] = _rank_normalize(0.60 * s_transit + 0.40 * s_stations)
         keep = ["code_iris", "station_count_velib", "avg_bikes_available",
                 "transit_stop_count", "metro_count", "rer_count",
                 "tram_count", "bus_count", "mobility_score"]
@@ -514,18 +531,18 @@ class IrisScorer:
 
     def score_health_env(self) -> pd.DataFrame:
         df = self._merge_base(_read_silver("health_env_by_iris.parquet"))
-        s_surface = _normalize(df.get("surface_fraicheur_ha"))
-        s_arbres = _normalize(df.get("arbres_per_km2"))
-        s_ilots = _normalize(df.get("nb_ilots_fraicheur"))
+        s_surface = _rank_fill(df.get("surface_fraicheur_ha"))
+        s_arbres = _rank_fill(df.get("arbres_per_km2"))
+        s_ilots = _rank_fill(df.get("nb_ilots_fraicheur"))
         if "european_aqi" in df.columns and pd.to_numeric(df["european_aqi"], errors="coerce").notna().any():
-            s_air = _normalize(df["european_aqi"], invert=True)
+            s_air = _rank_fill(df["european_aqi"], invert=True)
         elif "avg_atmo_index" in df.columns:
-            s_air = _normalize(df["avg_atmo_index"], invert=True)
+            s_air = _rank_fill(df["avg_atmo_index"], invert=True)
         else:
             s_air = pd.Series([50.0] * len(df), index=df.index)
-        df["health_env_score"] = (
+        df["health_env_score"] = _rank_normalize(
             0.40 * s_air + 0.25 * s_surface + 0.20 * s_arbres + 0.15 * s_ilots
-        ).round(1)
+        )
         keep = ["code_iris", "surface_fraicheur_ha", "arbres_per_km2",
                 "nb_ilots_fraicheur", "european_aqi", "avg_atmo_index", "health_env_score"]
         return df[[c for c in keep if c in df.columns]]
@@ -533,18 +550,18 @@ class IrisScorer:
     def score_tranquility(self) -> pd.DataFrame:
         df = self._merge_base(_read_silver("tranquility_by_iris.parquet"))
         if "crime_rate_per_1000" in df.columns and pd.to_numeric(df["crime_rate_per_1000"], errors="coerce").notna().any():
-            s_crime = _normalize(df["crime_rate_per_1000"], invert=True)
+            s_crime = _rank_fill(df["crime_rate_per_1000"], invert=True)
         else:
-            s_crime = _normalize(df.get("crime_count_total"), invert=True)
-        s_bruit = _normalize(df.get("noise_lden_surface_ha"), invert=True)
+            s_crime = _rank_fill(df.get("crime_count_total"), invert=True)
+        s_bruit = _rank_fill(df.get("noise_lden_surface_ha"), invert=True)
         nightlife = (
             pd.to_numeric(df.get("nb_bars"), errors="coerce").fillna(0)
             + pd.to_numeric(df.get("nb_nightclubs"), errors="coerce").fillna(0)
         )
-        s_nightlife = _normalize(nightlife, invert=True)
-        df["tranquility_score"] = (
+        s_nightlife = _rank_fill(nightlife, invert=True)
+        df["tranquility_score"] = _rank_normalize(
             0.40 * s_crime + 0.35 * s_bruit + 0.25 * s_nightlife
-        ).round(1)
+        )
         keep = ["code_iris", "crime_count_total", "crime_rate_per_1000",
                 "noise_lden_surface_ha", "nb_bars", "nb_nightclubs", "tranquility_score"]
         return df[[c for c in keep if c in df.columns]]

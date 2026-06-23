@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import RadarScoreChart from './RadarScoreChart';
+import { useState, useEffect, useMemo } from 'react';
+import RadarScoreChart, { IRIS_SCORE_AXES } from './RadarScoreChart';
 import PriceLineChart from './PriceLineChart';
 import { usePrices } from '../hooks/usePrices';
 import { useOperators } from '../hooks/useOperators';
@@ -10,8 +10,15 @@ import { api } from '../api/client';
  * Panneau d'analyse (droite du dashboard, 40%).
  * Affiche : Radar des scores + évolution des prix + métriques brutes.
  * En mode comparaison, superpose 2 arrondissements sur le radar.
+ *
+ * Mode quartier (IRIS) : quand un quartier est sélectionné sur la carte, le
+ * panneau bascule sur ce quartier (prix DVF, scores) et permet de le comparer
+ * à un autre quartier du même arrondissement.
  */
-export default function AnalyticsPanel({ selectedArrondissement, indicatorData, scoreData }) {
+export default function AnalyticsPanel({
+  selectedArrondissement, indicatorData, scoreData,
+  iris, selectedIris, onSelectIris,
+}) {
   const { prices, loading: pricesLoading, error: pricesError } = usePrices(selectedArrondissement);
   const { data: operatorData, loading: operatorsLoading } = useOperators(selectedArrondissement);
   const [compareWith, setCompareWith] = useState('');
@@ -45,6 +52,37 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
     ? `Paris ${selectedArrondissement}e — ${ARRONDISSEMENT_NAMES[selectedArrondissement] ?? ''}`
     : null;
 
+  // ── Mode quartier (IRIS) ─────────────────────────────────────
+  const irisList = useMemo(
+    () => (selectedArrondissement
+      ? (iris ?? []).filter((d) => d.arrondissement === selectedArrondissement)
+      : []),
+    [iris, selectedArrondissement],
+  );
+  const selectedIrisData = useMemo(
+    () => irisList.find((d) => d.code_iris === selectedIris) ?? null,
+    [irisList, selectedIris],
+  );
+  const [compareIris, setCompareIris] = useState('');
+  useEffect(() => { setCompareIris(''); }, [selectedIris, selectedArrondissement]);
+  const compareIrisData = compareIris
+    ? irisList.find((d) => d.code_iris === compareIris) ?? null
+    : null;
+
+  if (selectedIrisData) {
+    return (
+      <IrisPanel
+        irisList={irisList}
+        primary={selectedIrisData}
+        secondary={compareIrisData}
+        compareIris={compareIris}
+        onCompareChange={(e) => setCompareIris(e.target.value)}
+        onClear={() => onSelectIris?.(null)}
+        arrondissement={selectedArrondissement}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 h-full overflow-y-auto pr-1">
 
@@ -55,7 +93,7 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
         </h2>
         <p className="text-xs text-slate-500 mt-0.5">
           {selectedArrondissement
-            ? fmtArrondissement(selectedArrondissement)
+            ? `${fmtArrondissement(selectedArrondissement)} · Cliquez un quartier sur la carte pour le détail`
             : '20 arrondissements · Sélectionnez un arrondissement sur la carte'}
         </p>
       </div>
@@ -131,6 +169,125 @@ export default function AnalyticsPanel({ selectedArrondissement, indicatorData, 
 
       {/* Métriques brutes (si arrondissement sélectionné) */}
       {indicatorData && <MetricsDetail data={indicatorData} />}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Mode quartier (IRIS) — détail d'un quartier + comparaison intra-arrondissement
+// ─────────────────────────────────────────────────────────────────
+const _eurM2 = (v) =>
+  v != null ? `${new Intl.NumberFormat('fr-FR').format(Math.round(v))} €/m²` : '—';
+const _eur = (v) =>
+  v != null ? `${new Intl.NumberFormat('fr-FR').format(Math.round(v))} €` : '—';
+
+function IrisPanel({ irisList, primary, secondary, compareIris, onCompareChange, onClear, arrondissement }) {
+  const labelA = primary.nom_iris ?? primary.code_iris;
+  const labelB = secondary ? (secondary.nom_iris ?? secondary.code_iris) : undefined;
+
+  return (
+    <div className="flex flex-col gap-4 h-full overflow-y-auto pr-1">
+
+      {/* Titre quartier */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+            <span className="material-icon text-base text-blue-600">grid_on</span>
+            {labelA}
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Quartier (IRIS {primary.code_iris}) · Paris {arrondissement}e
+          </p>
+        </div>
+        <button className="btn-ghost text-xs shrink-0" onClick={onClear}>
+          ← Arrondissement
+        </button>
+      </div>
+
+      {/* Comparaison quartier ↔ quartier */}
+      <div>
+        <label className="text-xs text-slate-500 mb-1 block">Comparer avec un quartier</label>
+        <select className="select-field" value={compareIris} onChange={onCompareChange}>
+          <option value="">— Choisir un quartier —</option>
+          {irisList
+            .filter((d) => d.code_iris !== primary.code_iris)
+            .map((d) => (
+              <option key={d.code_iris} value={d.code_iris}>
+                {d.nom_iris ?? d.code_iris}
+              </option>
+            ))}
+        </select>
+      </div>
+
+      {/* Radar — axes IRIS (Animation, Tranquillité, Mobilité) */}
+      <div className="card">
+        <div className="flex items-start justify-between mb-1">
+          <p className="text-xs text-slate-500 uppercase tracking-wide">Profil des scores</p>
+          <div className="flex items-center gap-3 shrink-0">
+            <GlobalScoreBadge label={labelA} value={primary.livability_score} color="#2563EB" />
+            {secondary && (
+              <GlobalScoreBadge label={labelB} value={secondary.livability_score} color="#10B981" />
+            )}
+          </div>
+        </div>
+        <RadarScoreChart
+          primary={primary}
+          secondary={secondary}
+          labelA={labelA}
+          labelB={labelB}
+          axes={IRIS_SCORE_AXES}
+        />
+      </div>
+
+      {/* Prix DVF + revenu — au niveau quartier */}
+      <div className="card">
+        <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Prix &amp; revenus du quartier</p>
+        <div className="grid grid-cols-2 gap-3">
+          <IrisStat label="Prix m² médian (DVF)" value={_eurM2(primary.median_price)} color="#2563EB" sub={labelA} />
+          {secondary && (
+            <IrisStat label="Prix m² médian (DVF)" value={_eurM2(secondary.median_price)} color="#10B981" sub={labelB} />
+          )}
+          <IrisStat label="Revenu médian (INSEE)" value={_eur(primary.median_income)} color="#2563EB" sub={labelA} />
+          {secondary && (
+            <IrisStat label="Revenu médian (INSEE)" value={_eur(secondary.median_income)} color="#10B981" sub={labelB} />
+          )}
+        </div>
+      </div>
+
+      {/* Scores détaillés du quartier */}
+      <div className="card">
+        <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Scores du quartier</p>
+        <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+          {IRIS_SCORE_AXES.concat([{ key: 'livability_score', label: 'Vivabilité' }]).map(({ key, label }) => (
+            <div key={key} className="flex items-center justify-between text-xs">
+              <span className="text-slate-500">{label}</span>
+              <span className="font-medium text-slate-800">
+                {primary[key] != null ? `${primary[key].toFixed(1)}` : '—'}
+                {secondary && (
+                  <span className="text-emerald-600 ml-1.5">
+                    / {secondary[key] != null ? secondary[key].toFixed(1) : '—'}
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="text-[10px] text-slate-400 mt-2">
+          Scores normalisés par rang sur les 992 IRIS de Paris (médiane ~50).
+          Connectivité &amp; Santé Env. sont identiques dans tout l'arrondissement
+          (sources non infra-communales) — exclues de la comparaison de quartiers.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function IrisStat({ label, value, color, sub }) {
+  return (
+    <div className="bg-slate-50 border border-slate-150 rounded-lg p-2">
+      <p className="text-[10px] text-slate-400 uppercase leading-tight">{label}</p>
+      <p className="text-sm font-semibold mt-0.5" style={{ color }}>{value}</p>
+      {sub && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{sub}</p>}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import InteractiveMap from './InteractiveMap';
 import AnalyticsPanel from './AnalyticsPanel';
 import LiveStatusBadge from './LiveStatusBadge';
 import { useChantiers } from '../hooks/useChantiers';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 /**
  * Layout principal de l'application :
@@ -31,6 +31,11 @@ export default function DashboardLayout({
 }) {
   const [showChantiers, setShowChantiers] = useState(false);
   const { chantiers } = useChantiers(selectedArrondissement, showChantiers);
+
+  // Quartier (IRIS) sélectionné dans l'arrondissement courant — drill-down fin.
+  const [selectedIris, setSelectedIris] = useState(null);
+  // Réinitialiser le quartier quand on change/quitte l'arrondissement.
+  useEffect(() => { setSelectedIris(null); }, [selectedArrondissement]);
 
   const selectedScore = selectedArrondissement
     ? scoreMap?.[selectedArrondissement] ?? null
@@ -125,6 +130,8 @@ export default function DashboardLayout({
                 selectedIndicator={selectedIndicator}
                 selectedArrondissement={selectedArrondissement}
                 onSelectArrondissement={onSelectArrondissement}
+                selectedIris={selectedIris}
+                onSelectIris={setSelectedIris}
                 chantiers={chantiers}
                 showChantiers={showChantiers}
               />
@@ -136,6 +143,9 @@ export default function DashboardLayout({
                 selectedArrondissement={selectedArrondissement}
                 indicatorData={selectedIndicatorData}
                 scoreData={selectedScore}
+                iris={iris}
+                selectedIris={selectedIris}
+                onSelectIris={setSelectedIris}
               />
             </div>
           </div>
