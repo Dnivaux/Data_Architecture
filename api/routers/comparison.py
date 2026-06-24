@@ -31,6 +31,7 @@ _SCORE_COLS = """
     COALESCE(nb_nightclubs,    0)::int  AS nightclub_count,
     COALESCE(park_count,       0)::int  AS park_count,
     median_price,
+    median_income,
     NULL::real                          AS social_housing_pct
 """
 

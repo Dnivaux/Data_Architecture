@@ -86,6 +86,7 @@ def _build_detail_from_row(row) -> ArrondissementDetail:
         stadium_count=_safe(row, "stadium_count", int),
         museum_count=_safe(row, "museum_count", int),
         median_price=_safe(row, "median_price"),
+        median_income=_safe(row, "median_income"),
         nombre_logements_sociaux=_safe(row, "nombre_logements_sociaux", int),
     )
 
@@ -109,6 +110,7 @@ def _build_score_from_row(row) -> ArrondissementScore:
         stadium_count=int(_safe(row, "stadium_count", int) or 0),
         museum_count=int(_safe(row, "museum_count", int) or 0),
         median_price=_safe(row, "median_price"),
+        median_income=_safe(row, "median_income"),
         social_housing_pct=None,
         nombre_logements_sociaux=_safe(row, "nombre_logements_sociaux", int),
     )
@@ -145,7 +147,7 @@ def get_all_scores(db: Session = Depends(get_db)) -> list[ArrondissementScore]:
                     COALESCE(restaurant_count, 0)::int AS restaurant_count,
                     COALESCE(stadium_count,    0)::int AS stadium_count,
                     COALESCE(museum_count,     0)::int AS museum_count,
-                    median_price, nombre_logements_sociaux
+                    median_price, median_income, nombre_logements_sociaux
                 FROM gold_arrondissement_summary ORDER BY arrondissement
             """)
         ).mappings().all()
@@ -189,6 +191,7 @@ def get_indicator_scores(db: Session = Depends(get_db)) -> list[ArrondissementDe
                     m.nb_bars, m.nb_nightclubs,
                     m.cinema_count, m.restaurant_count, m.stadium_count, m.museum_count,
                     m.median_price,
+                    m.median_income,
                     m.nombre_logements_sociaux
                 FROM gold_indicator_scores s
                 LEFT JOIN gold_arrondissement_summary m USING (arrondissement)
@@ -233,7 +236,8 @@ def get_arrondissement_score(
                     COALESCE(restaurant_count, 0)::int AS restaurant_count,
                     COALESCE(stadium_count,    0)::int AS stadium_count,
                     COALESCE(museum_count,     0)::int AS museum_count,
-                    median_price
+                    median_price,
+                    median_income
                 FROM gold_arrondissement_summary WHERE arrondissement = :arr
             """),
             {"arr": arrondissement},

@@ -16,6 +16,10 @@ const FR_PCT = new Intl.NumberFormat('fr-FR', {
 export const fmtPrice = (v) =>
   v != null ? `${FR.format(Math.round(v))} €/m²` : '—';
 
+/** 25000 → "25 000 €" */
+export const fmtEur = (v) =>
+  v != null ? `${FR.format(Math.round(v))} €` : '—';
+
 /** 0.173 → "17,3 %" */
 export const fmtPct = (v) => (v != null ? FR_PCT.format(v / 100) : '—');
 

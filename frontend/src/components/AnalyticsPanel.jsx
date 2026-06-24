@@ -3,7 +3,7 @@ import RadarScoreChart, { IRIS_SCORE_AXES } from './RadarScoreChart';
 import PriceLineChart from './PriceLineChart';
 import { usePrices } from '../hooks/usePrices';
 import { useOperators } from '../hooks/useOperators';
-import { fmtArrondissement, fmtInt, fmtPrice, ARRONDISSEMENT_NAMES } from '../utils/formatters';
+import { fmtArrondissement, fmtInt, fmtPrice, fmtEur, ARRONDISSEMENT_NAMES } from '../utils/formatters';
 import { api } from '../api/client';
 
 /**
@@ -394,6 +394,7 @@ function ConnectivityDetail({ data, loading }) {
 function MetricsDetail({ data }) {
   const allMetrics = {
     median_price: { label: "Prix m² médian DVF", value: fmtPrice(data.median_price), icon: 'home' },
+    median_income: { label: "Revenu médian INSEE", value: data.median_income != null ? fmtEur(data.median_income) : null, icon: 'euro' },
     nombre_logements_sociaux: { label: "Logements sociaux", value: fmtInt(data.nombre_logements_sociaux), icon: 'apartment' },
     pct_eligible_ftth: { label: "Éligibles fibre", value: data.pct_eligible_ftth != null ? `${Math.round(data.pct_eligible_ftth)}%` : null, icon: 'signal_wifi_4_bar' },
     avg_rate_dl_5g_mbps: { label: "Couv. 5G (débit)", value: data.avg_rate_dl_5g_mbps != null ? `${Math.round(data.avg_rate_dl_5g_mbps)} Mbps` : null, icon: 'phone_iphone' },
@@ -422,7 +423,7 @@ function MetricsDetail({ data }) {
     {
       title: "Logement & Immobilier",
       icon: "home",
-      keys: ["median_price", "nombre_logements_sociaux", "pct_eligible_ftth"],
+      keys: ["median_price", "median_income", "nombre_logements_sociaux", "pct_eligible_ftth"],
       bgColor: "bg-blue-50/50 border-blue-100/70",
       textColor: "text-blue-700"
     },

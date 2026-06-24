@@ -11,7 +11,7 @@ export const INDICATOR_OPTIONS = [
   { id: 'european_aqi',       label: "Qualité de l'air",      icon: 'air',  desc: 'Indice européen AQI (Open-Meteo / CAMS)' },
   { id: 'pollen_total',       label: 'Pollen',                icon: 'grass', desc: 'Pic pollinique journalier (Open-Meteo)' },
   { id: 'median_price',       label: 'Prix m² médian',        icon: 'payments' },
-  { id: 'median_income',      label: 'Revenu médian (IRIS)',  icon: 'euro', desc: 'Revenu disponible médian INSEE FiLoSoFi, à la maille IRIS' },
+  { id: 'median_income',      label: 'Revenu médian (INSEE)', icon: 'euro', desc: 'Revenu disponible médian INSEE FiLoSoFi' },
 ];
 
 // Indicateurs réellement disponibles à la maille IRIS (les autres — qualité de

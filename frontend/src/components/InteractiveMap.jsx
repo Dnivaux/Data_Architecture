@@ -25,6 +25,7 @@ const INDICATOR_ICONS = {
   european_aqi: 'air',
   pollen_total: 'grass',
   median_price: 'payments',
+  median_income: 'euro',
 };
 
 // Indicateurs en valeur brute « bas = mieux » (échelle inversée pour la légende)

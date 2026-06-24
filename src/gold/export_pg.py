@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS gold_arrondissement_summary (
     nb_nightclubs           INTEGER,
     -- Métriques historiques
     median_price            REAL,
+    median_income           REAL,
     bar_count               INTEGER,
     park_count              INTEGER,
     -- Métriques animation / dynamisme (OSM)

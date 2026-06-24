@@ -199,6 +199,20 @@ def build_arrondissement_summary(logger: logging.Logger) -> pd.DataFrame:
                 on="arrondissement", how="left",
             )
 
+    # Revenus INSEE (médiane par arrondissement de median_income à la maille IRIS)
+    revenus = _read_silver("revenus_by_iris.parquet", logger)
+    if not revenus.empty:
+        rev_agg = (
+            revenus.groupby("arrondissement")["median_income"]
+            .median()
+            .reset_index()
+        )
+        if "median_income" not in base.columns:
+            base = base.merge(
+                rev_agg[["arrondissement", "median_income"]],
+                on="arrondissement", how="left",
+            )
+
     # Amenities OSM (bar_count, park_count legacy)
     amenities = _read_silver("amenities_by_arrondissement.parquet", logger)
     if not amenities.empty:

@@ -1,8 +1,8 @@
 import KPICard from './KPICard';
-import { fmtPrice, fmtPct, fmtScoreShort, fmtInt } from '../utils/formatters';
+import { fmtPrice, fmtPct, fmtScoreShort, fmtInt, fmtEur } from '../utils/formatters';
 
 /**
- * Grille de 6 KPI Cards affichées en haut du dashboard.
+ * Grille de 7 KPI Cards affichées en haut du dashboard.
  *
  * Si `data` est null, affiche des squelettes de chargement.
  * Si `liveData` est fourni, les cartes Mobilité pulsent en vert.
@@ -22,6 +22,15 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
       subValue: 'Données DVF (dernière année)',
       score: null,
       'data-testid': 'kpi-price',
+    },
+    {
+      id: 'median_income',
+      icon: 'euro',
+      label: 'Revenu médian',
+      value: fmtEur(d.median_income),
+      subValue: 'Données INSEE FiLoSoFi',
+      score: null,
+      'data-testid': 'kpi-income',
     },
     {
       id: 'livability_score',
@@ -76,7 +85,7 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
       {kpis.map((kpi) => (
         <KPICard
           key={kpi.label}
@@ -90,8 +99,8 @@ export default function KPIGrid({ data, liveData, onIndicatorClick }) {
 
 function KPISkeleton({ loading = false }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-      {Array.from({ length: 6 }).map((_, i) => (
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+      {Array.from({ length: 7 }).map((_, i) => (
         <div key={i} className={`card ${loading ? 'animate-pulse' : ''}`}>
           <div className="h-3 bg-slate-200 rounded w-2/3 mb-3" />
           <div className="h-7 bg-slate-200 rounded w-1/2 mb-2" />

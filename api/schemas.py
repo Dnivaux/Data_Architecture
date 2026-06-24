@@ -37,6 +37,7 @@ class ArrondissementScore(BaseModel):
     stadium_count:       int            = Field(0, description="Nombre de stades/salles de sport (OSM)")
     museum_count:        int            = Field(0, description="Nombre de musées (OSM)")
     median_price:            Optional[float] = Field(None, description="Prix médian DVF (€/m²)")
+    median_income:           Optional[float] = Field(None, description="Revenu médian disponible INSEE (€)")
     social_housing_pct:      Optional[float] = Field(None, description="% logements sociaux (déprécié)")
     nombre_logements_sociaux: Optional[int]  = Field(None, description="Nb logements sociaux (stock total)")
 
@@ -101,6 +102,9 @@ class ArrondissementDetail(BaseModel):
 
     # Prix
     median_price:        Optional[float] = Field(None, description="Prix médian DVF (€)")
+
+    # Revenu
+    median_income:       Optional[float] = Field(None, description="Revenu médian disponible INSEE (€)")
 
     # Logement social
     nombre_logements_sociaux: Optional[int] = Field(None, description="Nb logements sociaux (dernière année)")
