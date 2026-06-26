@@ -39,7 +39,7 @@ logger = get_logger("pipeline", LOG_DIR)
 # Source registry
 # ---------------------------------------------------------------------------
 
-ALL_SOURCES = ["dvf", "osm", "boundaries", "revenus", "air_quality", "crime"]
+ALL_SOURCES = ["dvf", "osm", "boundaries", "iris", "revenus", "air_quality", "crime"]
 
 
 def _build_task_map(args: argparse.Namespace) -> dict[str, Callable]:
@@ -47,6 +47,7 @@ def _build_task_map(args: argparse.Namespace) -> dict[str, Callable]:
     from src.ingestion import (
         ingest_air_quality,
         ingest_boundaries,
+        ingest_iris_boundaries,
         ingest_crime,
         ingest_dvf,
         ingest_osm,
@@ -62,6 +63,9 @@ def _build_task_map(args: argparse.Namespace) -> dict[str, Callable]:
     def boundaries():
         return ingest_boundaries()
 
+    def iris():
+        return ingest_iris_boundaries()
+
     def revenus():
         return ingest_revenus()
 
@@ -75,6 +79,7 @@ def _build_task_map(args: argparse.Namespace) -> dict[str, Callable]:
         "dvf": dvf,
         "osm": osm,
         "boundaries": boundaries,
+        "iris": iris,
         "revenus": revenus,
         "air_quality": air_quality,
         "crime": crime,

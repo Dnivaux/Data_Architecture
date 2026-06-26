@@ -6,19 +6,31 @@ tous normalisés en min-max sur [0, 100].
 
 Scores historiques (révisés pour éviter la duplication) :
   - score_anime          : densité bars / nightclubs / parcs (OSM)
-  - score_calme          : inverse bruit Lden SONLY (score 100 = très calme/silencieux)
-  - score_accessibilite  : inverse prix DVF + logement social
+  - score_calme          : [déprécié] None — logique bruit fusionnée dans tranquility
 
 Nouveaux scores stratégiques :
   - score_connectivity   : fibre + 4G/5G + ratio T2-T3
-  - score_mobility       : transports en commun ICAR (50%) + Vélib' (50%)
-  - score_health_env     : végétalisation (30%) + arbres (30%) + îlots (20%) + air_quality (20%)
-  - score_tranquility    : inverse (crime 40% + bruit 35% + bars/clubs 25%)
+  - score_mobility       : transports ICAR par mode (60%) + densité stations Vélib' (40%)
+  - score_health_env     : air_quality (40%) + végétalisation (25%) + arbres (20%) + îlots (15%)
+  - score_tranquility    : inverse (bruit Lden 45% + bruit Ln 25% + bars/clubs 30%)
 
 Changements v2 (2026-05-21) :
   ✓ Suppression de la duplication "crime" entre calme et tranquility
   ✓ Redéfinition de calme : SEULEMENT bruit (meilleure sémantique)
   ✓ Intégration qualité air dans health_env (santé = air pur)
+
+Changements v3 (2026-06-22) :
+  ✓ Réintégration de la criminalité dans tranquility (40%) — la sécurité compte
+  ✓ Suppression de l'indicateur Accessibilité : le prix DVF médian reste exposé
+    comme métrique brute (median_price) mais ne produit plus de score
+  ✓ Mobilité : chaque mode ICAR normalisé séparément (anti-domination RER) ;
+    Vélib' réduit au comptage de stations (bornes libres → métrique détaillée)
+
+Changements v4 (2026-06-23) :
+  ✓ Tranquillité : retrait de la criminalité du score, remplacée par le bruit
+    Bruitparif (Lden 45% jour-soir-nuit + Ln 25% nuit) + vie nocturne 30%.
+    La criminalité (crime_count_total, crime_rate_per_1000) reste exposée
+    UNIQUEMENT comme métrique détaillée.
 """
 from __future__ import annotations
 
@@ -59,6 +71,40 @@ def _normalize(series: pd.Series, invert: bool = False) -> pd.Series:
 
     normalized = (s - lo) / (hi - lo) * 100.0
     return (100.0 - normalized) if invert else normalized
+
+
+def _rank_normalize(series: pd.Series, invert: bool = False) -> pd.Series:
+    """
+    Normalisation par RANG sur [0, 100] (percentile).
+    Le plus faible → 0, le plus fort → 100, répartition régulière (médiane ~50).
+    Contrairement au min-max, insensible aux distributions asymétriques : un seul
+    arrondissement « hors-norme » ne tasse plus tous les autres vers le bas.
+    Si invert=True, le rang est inversé (valeur haute → score bas).
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    if s.notna().sum() <= 1:
+        return pd.Series(50.0, index=series.index)
+    ranks = s.rank(method="average")  # moyenne des ex-aequo
+    lo, hi = ranks.min(), ranks.max()
+    if hi == lo:
+        return pd.Series(50.0, index=series.index)
+    normalized = (ranks - lo) / (hi - lo) * 100.0
+    return ((100.0 - normalized) if invert else normalized).round(1)
+
+
+def _rank_fill(series: pd.Series, invert: bool = False) -> pd.Series:
+    """Normalisation par RANG, robuste aux NaN.
+
+    `_rank_normalize` laisse les NaN tels quels (rank() ne les classe pas) ;
+    on les remplace d'abord par la médiane (→ rang neutre ~50), comme le fait
+    `_normalize`. Utilisé par le scoring IRIS pour étaler les scores sur 0-100
+    sans subir le tassement min-max dû aux IRIS-hubs extrêmes (centre de Paris).
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    med = s.median()
+    if pd.notna(med):
+        s = s.fillna(med)
+    return _rank_normalize(s, invert=invert)
 
 
 def _read_silver(filename: str) -> pd.DataFrame:
@@ -112,7 +158,17 @@ class ArrondissementScorer:
     # ------------------------------------------------------------------
 
     def score_anime(self) -> pd.DataFrame:
-        """Densité bars + nightclubs + parcs (OSM). Score 0-100."""
+        """
+        Dynamisme de quartier 0-100.
+        Composantes pondérées (OSM, chacune min-max) :
+          musée (25%) + bar (20%) + cinema (15%) + park (15%)
+          + nightclub (10%) + restaurant (10%) + stadium (5%)
+
+        Le mélange pondéré sert à classer les arrondissements ; le score final est
+        ensuite normalisé par RANG (percentile) → médiane ~50, plus animé = 100.
+        Évite l'effet de tassement du min-max sur des comptages très asymétriques
+        (ex : le 11e concentre les bars et écrasait tous les autres vers le bas).
+        """
         osm_df = read_parquet("osm")
         if osm_df.empty or self.boundaries_gdf.empty:
             self.logger.warning("Données OSM ou boundaries absentes pour score animé")
@@ -134,17 +190,40 @@ class ArrondissementScorer:
             .unstack(fill_value=0)
             .reset_index()
         )
-        for col in ["bar", "nightclub", "park"]:
+        for col in ["bar", "nightclub", "park", "cinema", "restaurant", "stadium", "museum"]:
             if col not in counts.columns:
                 counts[col] = 0
 
-        counts["total_poi"] = counts["bar"] + counts["nightclub"] + counts["park"]
-        counts["anime_score"] = _normalize(counts["total_poi"]).round(1)
+        # Normalisation individuelle de chaque composante avant pondération
+        s_restaurant = _normalize(counts["restaurant"])
+        s_bar        = _normalize(counts["bar"])
+        s_cinema     = _normalize(counts["cinema"])
+        s_park       = _normalize(counts["park"])
+        s_nightclub  = _normalize(counts["nightclub"])
+        s_museum     = _normalize(counts["museum"])
+        s_stadium    = _normalize(counts["stadium"])
+
+        # Mélange pondéré (composantes déjà min-max) → score relatif brut…
+        _anime_blend = (
+            0.25 * s_museum
+            + 0.20 * s_bar
+            + 0.15 * s_cinema
+            + 0.15 * s_park
+            + 0.10 * s_nightclub
+            + 0.10 * s_restaurant
+            + 0.05 * s_stadium
+        )
+        # …puis normalisation par rang pour une échelle intuitive (médiane ~50, top = 100)
+        counts["anime_score"] = _rank_normalize(_anime_blend)
+
         counts = counts.rename(columns={
-            "bar": "bar_count", "nightclub": "nightclub_count", "park": "park_count"
+            "bar": "bar_count", "nightclub": "nightclub_count", "park": "park_count",
+            "cinema": "cinema_count", "restaurant": "restaurant_count", "stadium": "stadium_count",
+            "museum": "museum_count",
         })
-        return counts[["arrondissement", "bar_count", "nightclub_count",
-                        "park_count", "total_poi", "anime_score"]]
+        return counts[["arrondissement", "bar_count", "nightclub_count", "park_count",
+                        "cinema_count", "restaurant_count", "stadium_count", "museum_count",
+                        "anime_score"]]
 
     def score_calme(self) -> pd.DataFrame:
         """
@@ -155,37 +234,6 @@ class ArrondissementScorer:
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
         base["calme_score"] = None
         return base[["arrondissement", "calme_score"]]
-
-    def score_accessibilite(self) -> pd.DataFrame:
-        """Inverse prix DVF (médian) + % logement social. Score 100 = très accessible."""
-        base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
-
-        dvf_df = read_parquet("dvf")
-        if not dvf_df.empty and self.boundaries_gdf is not None and not self.boundaries_gdf.empty:
-            dvf_df = dvf_df.dropna(subset=["latitude", "longitude", "valeur_fonciere"])
-            dvf_gdf = gpd.GeoDataFrame(
-                dvf_df,
-                geometry=gpd.points_from_xy(dvf_df["longitude"], dvf_df["latitude"]),
-                crs="EPSG:4326",
-            )
-            joined = gpd.sjoin(
-                dvf_gdf, self.boundaries_gdf[["arrondissement", "geometry"]],
-                how="left", predicate="within",
-            )
-            price_agg = (
-                joined.groupby("arrondissement")["valeur_fonciere"]
-                .median().reset_index(name="median_price")
-            )
-            base = base.merge(price_agg, on="arrondissement", how="left")
-        else:
-            self.logger.warning("DVF ou boundaries vides — prix médian à NA")
-            base["median_price"] = pd.NA
-
-        base["social_housing_pct"] = pd.NA  # alimenté par revenus.py si disponible
-        base["price_score"]        = _normalize(base["median_price"], invert=True)
-        base["accessibilite_score"] = base["price_score"].round(1)
-        return base[["arrondissement", "median_price",
-                     "social_housing_pct", "accessibilite_score"]]
 
     # ------------------------------------------------------------------
     # Nouveaux scores stratégiques (lus depuis Silver indicators)
@@ -218,12 +266,17 @@ class ArrondissementScorer:
 
     def score_mobility(self) -> pd.DataFrame:
         """
-        Score Mobilité 0-100 — v2 (ICAR + Vélib').
+        Score Mobilité 0-100 — v3 (ICAR + Vélib').
         Composantes :
-          Transports en commun ICAR (50%) :
-            transit_capacity_raw = metro*3 + rer*3 + tram*2 + bus*1 → normalisé
-          Mobilités douces Vélib' (50%) :
-            avg_bikes_available (20%) + station_count_velib (15%) + avg_docks_available (15%)
+          Transports en commun ICAR (60%) — chaque mode normalisé SÉPARÉMENT
+          puis pondéré, pour qu'un arrondissement à fort hub RER ne sature plus
+          tout le score (il ne plafonne que sa propre sous-composante) :
+            metro (40%) + rer (25%) + bus (20%) + tram (15%)
+          Densité Vélib' (40%) :
+            station_count_velib normalisé.
+
+        avg_bikes_available et avg_docks_available sont conservés comme métriques
+        détaillées (dashboard) mais ne pèsent plus dans le score.
         """
         df = _read_silver("mobility_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -234,35 +287,29 @@ class ArrondissementScorer:
 
         base = base.merge(df, on="arrondissement", how="left")
 
-        # --- Vélib' ---
-        s_bikes    = _normalize(base.get("avg_bikes_available",  pd.Series([0.0] * 20)))
+        # --- Vélib' : densité de stations uniquement ---
         s_stations = _normalize(base.get("station_count_velib",  pd.Series([0.0] * 20)))
-        # Bornes libres : moins saturé = meilleur accès
-        s_docks    = _normalize(base.get("avg_docks_available",  pd.Series([0.0] * 20)))
 
-        # --- Transports en commun ICAR ---
+        # --- Transports en commun ICAR (normalisation intra-mode) ---
         _icar_cols = ["metro_count", "rer_count", "tram_count", "bus_count"]
         if all(c in base.columns for c in _icar_cols):
-            metro = pd.to_numeric(base["metro_count"], errors="coerce").fillna(0)
-            rer   = pd.to_numeric(base["rer_count"],   errors="coerce").fillna(0)
-            tram  = pd.to_numeric(base["tram_count"],  errors="coerce").fillna(0)
-            bus   = pd.to_numeric(base["bus_count"],   errors="coerce").fillna(0)
-            # Capacité pondérée : metro/RER (×3) > tram (×2) > bus (×1)
-            transit_capacity_raw = metro * 3 + rer * 3 + tram * 2 + bus
-            s_transit = _normalize(transit_capacity_raw)
+            s_metro = _normalize(pd.to_numeric(base["metro_count"], errors="coerce").fillna(0))
+            s_rer   = _normalize(pd.to_numeric(base["rer_count"],   errors="coerce").fillna(0))
+            s_tram  = _normalize(pd.to_numeric(base["tram_count"],  errors="coerce").fillna(0))
+            s_bus   = _normalize(pd.to_numeric(base["bus_count"],   errors="coerce").fillna(0))
+            # Métro = colonne vertébrale parisienne > RER > bus > tram (périphérique)
+            s_transit = 0.40 * s_metro + 0.25 * s_rer + 0.20 * s_bus + 0.15 * s_tram
             self.logger.info(
-                "Score mobilité ICAR : capacité transit min=%.0f max=%.0f",
-                transit_capacity_raw.min(), transit_capacity_raw.max(),
+                "Score mobilité ICAR : modes normalisés séparément "
+                "(metro/rer/bus/tram = 40/25/20/15)",
             )
         else:
             self.logger.warning("Colonnes ICAR absentes du Silver mobility — s_transit par défaut 50")
             s_transit = pd.Series([50.0] * len(base))
 
         base["mobility_score"] = (
-            0.50 * s_transit
-            + 0.20 * s_bikes
-            + 0.15 * s_stations
-            + 0.15 * s_docks
+            0.60 * s_transit
+            + 0.40 * s_stations
         ).round(1)
 
         result_cols = [
@@ -276,11 +323,14 @@ class ArrondissementScorer:
     def score_health_env(self) -> pd.DataFrame:
         """
         Score Santé Environnementale 0-100.
-        Composantes : surface_fraicheur_ha (30%), arbres_per_km2 (30%),
-                      nb_ilots_fraicheur (20%), avg_atmo_index Citeair (20%).
+        Composantes : qualité de l'air european_aqi (40% — facteur dominant),
+                      surface_fraicheur_ha (25%), arbres_per_km2 (20%),
+                      nb_ilots_fraicheur (15%).
 
-        avg_atmo_index : indice Citeair moyen [0-100+] agrégé par arrondissement
-        dans le Silver health_env. invert=True → score élevé = air pur.
+        european_aqi : indice européen Open-Meteo [0-100+] agrégé par arrondissement
+        dans le Silver health_env (0 = excellent). invert=True → air pur = score élevé.
+        Repli sur avg_atmo_index (Citeair) si european_aqi indisponible.
+        Le pollen n'entre PAS dans le score (métrique détaillée uniquement).
         """
         df = _read_silver("health_env_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -296,21 +346,27 @@ class ArrondissementScorer:
         s_arbres  = _normalize(base.get("arbres_per_km2",       pd.Series([0.0]*20)))
         s_ilots   = _normalize(base.get("nb_ilots_fraicheur",   pd.Series([0.0]*20)))
 
-        # Qualité air Citeair — avg_atmo_index agrégé dans le Silver health_env
-        # invert=True : Citeair bas (0) = bon air = score haut (100)
-        if "avg_atmo_index" in base.columns:
-            s_air = _normalize(base["avg_atmo_index"], invert=True)
+        # Qualité de l'air — european_aqi (Open-Meteo, 0 = excellent) agrégé en Silver.
+        # invert=True : european_aqi bas = bon air = score haut. Repli sur avg_atmo_index.
+        _aqi_vals = pd.to_numeric(base.get("european_aqi"), errors="coerce") \
+            if "european_aqi" in base.columns else pd.Series(dtype=float)
+        if _aqi_vals.notna().any():
+            s_air = _normalize(base["european_aqi"], invert=True)
             self.logger.info(
-                "Score santé : avg_atmo_index min=%.1f max=%.1f",
-                base["avg_atmo_index"].min(),
-                base["avg_atmo_index"].max(),
+                "Score santé : european_aqi min=%.1f max=%.1f",
+                _aqi_vals.min(), _aqi_vals.max(),
             )
+        elif "avg_atmo_index" in base.columns and pd.to_numeric(
+            base["avg_atmo_index"], errors="coerce"
+        ).notna().any():
+            s_air = _normalize(base["avg_atmo_index"], invert=True)
+            self.logger.info("Score santé : repli avg_atmo_index (european_aqi absent)")
         else:
-            self.logger.warning("avg_atmo_index absent du Silver health_env — s_air par défaut 50")
+            self.logger.warning("Aucune métrique air dans Silver health_env — s_air par défaut 50")
             s_air = pd.Series([50.0] * len(base))
 
         base["health_env_score"] = (
-            0.30 * s_surface + 0.30 * s_arbres + 0.20 * s_ilots + 0.20 * s_air
+            0.40 * s_air + 0.25 * s_surface + 0.20 * s_arbres + 0.15 * s_ilots
         ).round(1)
 
         result_cols = [
@@ -318,6 +374,7 @@ class ArrondissementScorer:
             "surface_fraicheur_ha",
             "arbres_per_km2",
             "nb_ilots_fraicheur",
+            "european_aqi",
             "avg_atmo_index",
             "health_env_score",
         ]
@@ -325,19 +382,18 @@ class ArrondissementScorer:
 
     def score_tranquility(self) -> pd.DataFrame:
         """
-        Score Tranquillité (fusion Calme + Tranquillité) v2 — 0-100.
-        Mesure les nuisances sonores et nocturnes UNIQUEMENT.
+        Score Tranquillité (Calme sonore + Vie nocturne) v4 — 0-100.
 
-        Composantes :
-          - bruit Lden (surface exposée ≥55 dB)  → 60%  [fusion de l'ancien Calme]
-          - densité bars + boîtes de nuit         → 40%
+        Composantes (inversées : valeur haute = nuisance → score bas) :
+          - bruit Lden Bruitparif (surface ≥55 dB jour-soir-nuit) → 45%
+          - bruit Ln  Bruitparif (surface ≥50 dB nuit)            → 25%
+          - densité bars + boîtes de nuit (OSM)                   → 30%
 
-        Crime exclu volontairement : la criminalité reste visible en
-        « Métriques détaillées » (crime_count_total, crime_rate_per_1000)
-        mais n'influence plus ce score pour ne pas le confondre avec la sécurité.
+        La criminalité n'entre PLUS dans le score (conservée uniquement comme
+        métrique détaillée). Le calme repose désormais sur le bruit Bruitparif.
 
         Score 100 = arrondissement silencieux, peu de vie nocturne.
-        Score   0 = arrondissement bruyant avec forte densité bars/clubs.
+        Score   0 = arrondissement bruyant (jour et nuit), dense en bars/clubs.
         """
         df = _read_silver("tranquility_by_arrondissement.parquet")
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
@@ -348,9 +404,15 @@ class ArrondissementScorer:
 
         base = base.merge(df, on="arrondissement", how="left")
 
-        # Bruit Lden (surface en ha exposée ≥ 55 dB) : plus bas = plus calme
-        s_bruit = _normalize(
+        # Bruit Lden Bruitparif (surface en ha exposée ≥ 55 dB, jour-soir-nuit) :
+        # plus bas = plus calme.
+        s_bruit_lden = _normalize(
             base.get("noise_lden_surface_ha", pd.Series([0.0] * 20)), invert=True
+        )
+        # Bruit Ln Bruitparif (surface en ha exposée ≥ 50 dB la nuit) : pénalise
+        # spécifiquement les nuisances nocturnes, plus impactantes pour le repos.
+        s_bruit_ln = _normalize(
+            base.get("noise_ln_surface_ha", pd.Series([0.0] * 20)), invert=True
         )
 
         # Vie nocturne : bars + nightclubs (OSM). Plus bas = plus tranquille.
@@ -360,11 +422,13 @@ class ArrondissementScorer:
         )
         s_nightlife = _normalize(nightlife, invert=True)
 
-        base["tranquility_score"] = (0.60 * s_bruit + 0.40 * s_nightlife).round(1)
+        base["tranquility_score"] = (
+            0.45 * s_bruit_lden + 0.25 * s_bruit_ln + 0.30 * s_nightlife
+        ).round(1)
 
-        # crime_count_total et crime_rate_per_1000 conservés comme métriques brutes
         return base[["arrondissement", "crime_count_total", "crime_rate_per_1000",
-                     "noise_lden_surface_ha", "nb_bars", "nb_nightclubs",
+                     "noise_lden_surface_ha", "noise_ln_surface_ha",
+                     "nb_bars", "nb_nightclubs",
                      "tranquility_score"]]
 
     # ------------------------------------------------------------------
@@ -380,14 +444,13 @@ class ArrondissementScorer:
 
         anime         = self.score_anime()
         calme         = self.score_calme()
-        accessibilite = self.score_accessibilite()
         connectivity  = self.score_connectivity()
         mobility      = self.score_mobility()
         health_env    = self.score_health_env()
         tranquility   = self.score_tranquility()
 
         base = pd.DataFrame({"arrondissement": PARIS_ARRONDISSEMENTS})
-        for df in [anime, calme, accessibilite, connectivity,
+        for df in [anime, calme, connectivity,
                    mobility, health_env, tranquility]:
             if not df.empty:
                 base = base.merge(df, on="arrondissement", how="left")
@@ -395,3 +458,152 @@ class ArrondissementScorer:
         base["computed_at"] = datetime.now(timezone.utc)
         self.logger.info("Scores calculés pour %d arrondissements", len(base))
         return base
+
+
+# ---------------------------------------------------------------------------
+# Scoring à la maille IRIS (grain primaire)
+# ---------------------------------------------------------------------------
+
+class IrisScorer:
+    """Calcule les scores de vivabilité par IRIS (~992 zones).
+
+    Réutilise les normalisations `_normalize` / `_rank_normalize`, désormais
+    appliquées sur ~992 IRIS (bien plus discriminant que 20 arrondissements).
+    Lit les tables Silver `*_by_iris.parquet` produites par `iris_layer.py`.
+    Les composantes rediffusées (air, crime, bruit, connectivité) sont
+    constantes au sein d'un arrondissement ; les composantes IRIS-natives
+    (animation OSM, mobilité, prix, revenus) introduisent la variation interne.
+    """
+
+    def __init__(self, logger: logging.Logger | None = None):
+        self.logger = logger or get_logger("scoring_iris", LOG_DIR)
+        self.base = _read_silver("iris_base.parquet")
+
+    def _merge_base(self, df: pd.DataFrame) -> pd.DataFrame:
+        skeleton = self.base[["code_iris", "arrondissement"]].copy()
+        if df.empty:
+            return skeleton
+        cols = [c for c in df.columns if c not in ("arrondissement", "granularite")]
+        return skeleton.merge(df[cols], on="code_iris", how="left")
+
+    def score_anime(self) -> pd.DataFrame:
+        df = self._merge_base(_read_silver("amenities_by_iris.parquet"))
+        for col in ["bar_count", "nightclub_count", "park_count",
+                    "cinema_count", "restaurant_count", "stadium_count", "museum_count"]:
+            if col not in df.columns:
+                df[col] = 0
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        # Normalisation par RANG (percentile) à chaque composante puis sur le mélange
+        # → scores étalés 0-100, robustes aux distributions très asymétriques.
+        blend = (
+            0.25 * _rank_fill(df["museum_count"])
+            + 0.20 * _rank_fill(df["bar_count"])
+            + 0.15 * _rank_fill(df["cinema_count"])
+            + 0.15 * _rank_fill(df["park_count"])
+            + 0.10 * _rank_fill(df["nightclub_count"])
+            + 0.10 * _rank_fill(df["restaurant_count"])
+            + 0.05 * _rank_fill(df["stadium_count"])
+        )
+        df["anime_score"] = _rank_normalize(blend)
+        return df[["code_iris", "bar_count", "nightclub_count", "park_count",
+                   "cinema_count", "restaurant_count", "stadium_count", "museum_count",
+                   "anime_score"]]
+
+    def score_connectivity(self) -> pd.DataFrame:
+        df = self._merge_base(_read_silver("connectivity_by_iris.parquet"))
+        df["connectivity_score"] = _rank_normalize(
+            0.40 * _rank_fill(df.get("pct_eligible_ftth"))
+            + 0.30 * _rank_fill(df.get("pct_pop_4g_mean"))
+            + 0.15 * _rank_fill(df.get("pct_pop_5g_mean"))
+            + 0.15 * _rank_fill(df.get("pct_t2_t3"))
+        )
+        keep = ["code_iris", "pct_eligible_ftth", "pct_pop_4g_mean",
+                "pct_pop_5g_mean", "pct_t2_t3", "connectivity_score"]
+        return df[[c for c in keep if c in df.columns]]
+
+    def score_mobility(self) -> pd.DataFrame:
+        df = self._merge_base(_read_silver("mobility_by_iris.parquet"))
+        s_stations = _rank_fill(pd.to_numeric(df.get("station_count_velib"), errors="coerce").fillna(0))
+        modes = ["metro_count", "rer_count", "tram_count", "bus_count"]
+        if all(c in df.columns for c in modes):
+            s_transit = (
+                0.40 * _rank_fill(pd.to_numeric(df["metro_count"], errors="coerce").fillna(0))
+                + 0.25 * _rank_fill(pd.to_numeric(df["rer_count"], errors="coerce").fillna(0))
+                + 0.20 * _rank_fill(pd.to_numeric(df["bus_count"], errors="coerce").fillna(0))
+                + 0.15 * _rank_fill(pd.to_numeric(df["tram_count"], errors="coerce").fillna(0))
+            )
+        else:
+            s_transit = pd.Series([50.0] * len(df), index=df.index)
+        df["mobility_score"] = _rank_normalize(0.60 * s_transit + 0.40 * s_stations)
+        keep = ["code_iris", "station_count_velib", "avg_bikes_available",
+                "transit_stop_count", "metro_count", "rer_count",
+                "tram_count", "bus_count", "mobility_score"]
+        return df[[c for c in keep if c in df.columns]]
+
+    def score_health_env(self) -> pd.DataFrame:
+        df = self._merge_base(_read_silver("health_env_by_iris.parquet"))
+        s_surface = _rank_fill(df.get("surface_fraicheur_ha"))
+        s_arbres = _rank_fill(df.get("arbres_per_km2"))
+        s_ilots = _rank_fill(df.get("nb_ilots_fraicheur"))
+        if "european_aqi" in df.columns and pd.to_numeric(df["european_aqi"], errors="coerce").notna().any():
+            s_air = _rank_fill(df["european_aqi"], invert=True)
+        elif "avg_atmo_index" in df.columns:
+            s_air = _rank_fill(df["avg_atmo_index"], invert=True)
+        else:
+            s_air = pd.Series([50.0] * len(df), index=df.index)
+        df["health_env_score"] = _rank_normalize(
+            0.40 * s_air + 0.25 * s_surface + 0.20 * s_arbres + 0.15 * s_ilots
+        )
+        keep = ["code_iris", "surface_fraicheur_ha", "arbres_per_km2",
+                "nb_ilots_fraicheur", "european_aqi", "avg_atmo_index", "health_env_score"]
+        return df[[c for c in keep if c in df.columns]]
+
+    def score_tranquility(self) -> pd.DataFrame:
+        # Tranquillité = calme sonore (Bruitparif Lden + Ln) + vie nocturne.
+        # La criminalité reste en métrique détaillée mais n'entre plus dans le score.
+        df = self._merge_base(_read_silver("tranquility_by_iris.parquet"))
+        s_bruit_lden = _rank_fill(df.get("noise_lden_surface_ha"), invert=True)
+        s_bruit_ln = _rank_fill(df.get("noise_ln_surface_ha"), invert=True)
+        nightlife = (
+            pd.to_numeric(df.get("nb_bars"), errors="coerce").fillna(0)
+            + pd.to_numeric(df.get("nb_nightclubs"), errors="coerce").fillna(0)
+        )
+        s_nightlife = _rank_fill(nightlife, invert=True)
+        df["tranquility_score"] = _rank_normalize(
+            0.45 * s_bruit_lden + 0.25 * s_bruit_ln + 0.30 * s_nightlife
+        )
+        keep = ["code_iris", "crime_count_total", "crime_rate_per_1000",
+                "noise_lden_surface_ha", "noise_ln_surface_ha",
+                "nb_bars", "nb_nightclubs", "tranquility_score"]
+        return df[[c for c in keep if c in df.columns]]
+
+    def compute_all_scores(self) -> pd.DataFrame:
+        """Fusionne tous les scores IRIS + métriques brutes (prix, revenus)."""
+        if self.base.empty:
+            self.logger.error("iris_base absente — scoring IRIS impossible")
+            return pd.DataFrame()
+
+        self.logger.info("Calcul des scores IRIS (%d zones)", len(self.base))
+        out = self.base[["code_iris", "arrondissement", "nom_iris"]].copy()
+        for df in [self.score_anime(), self.score_connectivity(), self.score_mobility(),
+                   self.score_health_env(), self.score_tranquility()]:
+            if not df.empty:
+                out = out.merge(df, on="code_iris", how="left")
+
+        # Métriques brutes IRIS-natives : prix DVF médian (dernière année) + revenus
+        prices = _read_silver("prices_by_iris_year.parquet")
+        if not prices.empty and "year" in prices.columns:
+            latest = prices[prices["year"] == prices["year"].max()]
+            out = out.merge(
+                latest[["code_iris", "median_price"]], on="code_iris", how="left"
+            )
+        revenus = _read_silver("revenus_by_iris.parquet")
+        if not revenus.empty:
+            out = out.merge(
+                revenus[["code_iris", "median_income", "gini_coefficient", "poverty_rate"]],
+                on="code_iris", how="left",
+            )
+
+        out["computed_at"] = datetime.now(timezone.utc)
+        self.logger.info("Scores IRIS calculés pour %d zones", len(out))
+        return out

@@ -29,7 +29,7 @@ from pathlib import Path
 import pandas as pd
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from api.security import API_KEYS, require_api_key
+from api.security import API_KEYS, is_valid_api_key, require_api_key
 
 router = APIRouter(prefix="/live", tags=["live"])
 
@@ -91,10 +91,14 @@ async def velib_stream(websocket: WebSocket) -> None:
     Auth : si API_KEYS est défini, fournir ?api_key=... (les navigateurs ne
     peuvent pas poser d'en-tête sur un WebSocket → on passe par la query string).
     """
-    # --- Authentification (query param, car pas d'en-tête possible en WS navigateur) ---
+    # --- Authentification ---
+    # Priorité à l'en-tête X-API-Key (non journalisé) ; repli sur la query string
+    # pour les clients navigateur qui ne peuvent pas poser d'en-tête sur un WS.
+    # NB : transmettre la clé en query string l'expose aux logs/proxies → préférer
+    # l'en-tête quand c'est possible. Comparaison en temps constant.
     if API_KEYS:
-        key = websocket.query_params.get("api_key")
-        if key not in API_KEYS:
+        key = websocket.headers.get("x-api-key") or websocket.query_params.get("api_key")
+        if not is_valid_api_key(key):
             await websocket.close(code=4401)  # 4401 = Unauthorized (convention applicative)
             return
 

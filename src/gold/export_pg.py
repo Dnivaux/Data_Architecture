@@ -56,7 +56,6 @@ CREATE TABLE IF NOT EXISTS gold_arrondissement_summary (
     -- Scores historiques
     anime_score             REAL,
     calme_score             REAL,
-    accessibilite_score     REAL,
     -- Nouveaux scores stratégiques
     connectivity_score      REAL,
     mobility_score          REAL,
@@ -102,8 +101,15 @@ CREATE TABLE IF NOT EXISTS gold_arrondissement_summary (
     nb_nightclubs           INTEGER,
     -- Métriques historiques
     median_price            REAL,
+    median_income           REAL,
     bar_count               INTEGER,
     park_count              INTEGER,
+    -- Métriques animation / dynamisme (OSM)
+    nightclub_count         INTEGER,
+    cinema_count            INTEGER,
+    restaurant_count        INTEGER,
+    stadium_count           INTEGER,
+    museum_count            INTEGER,
     -- Métadonnées
     updated_at              TIMESTAMPTZ
 );
@@ -116,7 +122,6 @@ CREATE TABLE IF NOT EXISTS gold_indicator_scores (
     geometry_wkt            TEXT,
     anime_score             REAL,
     calme_score             REAL,
-    accessibilite_score     REAL,
     connectivity_score      REAL,
     mobility_score          REAL,
     health_env_score        REAL,
@@ -160,6 +165,63 @@ CREATE TABLE IF NOT EXISTS gold_social_housing_timeline (
 );
 """
 
+# Tables IRIS (grain primaire ~992 zones). code_iris est la PK (TEXT 9 chiffres).
+# arrondissement reste exposé comme dimension parente.
+_DDL_IRIS_SUMMARY = """
+CREATE TABLE IF NOT EXISTS gold_iris_summary (
+    code_iris               TEXT        PRIMARY KEY,
+    arrondissement          SMALLINT,
+    nom_iris                TEXT,
+    geometry_wkt            TEXT,
+    -- Scores (normalisés sur ~992 IRIS)
+    anime_score             REAL,
+    connectivity_score      REAL,
+    mobility_score          REAL,
+    health_env_score        REAL,
+    tranquility_score       REAL,
+    livability_score        REAL,
+    -- Métriques brutes IRIS-natives (fortement discriminantes)
+    median_price            REAL,
+    median_income           REAL,
+    gini_coefficient        REAL,
+    poverty_rate            REAL,
+    -- Comptages OSM par IRIS
+    bar_count               INTEGER,
+    nightclub_count         INTEGER,
+    park_count              INTEGER,
+    cinema_count            INTEGER,
+    restaurant_count        INTEGER,
+    stadium_count           INTEGER,
+    museum_count            INTEGER,
+    -- Mobilité
+    station_count_velib     REAL,
+    transit_stop_count      REAL,
+    metro_count             REAL,
+    -- Métadonnées
+    updated_at              TIMESTAMPTZ
+);
+"""
+
+_DDL_IRIS_INDICATOR_SCORES = """
+CREATE TABLE IF NOT EXISTS gold_iris_indicator_scores (
+    code_iris               TEXT        PRIMARY KEY,
+    arrondissement          SMALLINT,
+    nom_iris                TEXT,
+    geometry_wkt            TEXT,
+    anime_score             REAL,
+    connectivity_score      REAL,
+    mobility_score          REAL,
+    health_env_score        REAL,
+    tranquility_score       REAL,
+    livability_score        REAL,
+    median_price            REAL,
+    median_income           REAL,
+    gini_coefficient        REAL,
+    poverty_rate            REAL,
+    updated_at              TIMESTAMPTZ
+);
+"""
+
 # Colonnes constituant la clé primaire de chaque table (pour l'upsert)
 _PK_COLUMNS: dict[str, list[str]] = {
     "gold_arrondissement_summary": ["arrondissement"],
@@ -167,6 +229,8 @@ _PK_COLUMNS: dict[str, list[str]] = {
     "gold_poi_catalog":            ["id"],
     "gold_price_timeline":         ["arrondissement", "year"],
     "gold_social_housing_timeline":["arrondissement", "annee"],
+    "gold_iris_summary":           ["code_iris"],
+    "gold_iris_indicator_scores":  ["code_iris"],
 }
 
 _DDL_MAP = {
@@ -175,6 +239,8 @@ _DDL_MAP = {
     "gold_poi_catalog":            _DDL_POI,
     "gold_price_timeline":         _DDL_TIMELINE,
     "gold_social_housing_timeline":_DDL_SOCIAL_HOUSING_TIMELINE,
+    "gold_iris_summary":           _DDL_IRIS_SUMMARY,
+    "gold_iris_indicator_scores":  _DDL_IRIS_INDICATOR_SCORES,
 }
 
 
@@ -408,6 +474,8 @@ def export_all(
         ("poi_catalog.parquet",                "gold_poi_catalog"),
         ("price_timeline.parquet",             "gold_price_timeline"),
         ("social_housing_timeline.parquet",    "gold_social_housing_timeline"),
+        ("iris_summary.parquet",               "gold_iris_summary"),
+        ("iris_indicator_scores.parquet",      "gold_iris_indicator_scores"),
     ]
 
     if tables:

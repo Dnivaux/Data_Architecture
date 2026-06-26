@@ -36,12 +36,13 @@ logger = get_logger("pipeline_full", LOG_DIR)
 def _run_static_indicators() -> None:
     """Ingestion séquentielle des 3 modules Bronze statiques (nouveaux indicateurs)."""
     indicators = [
+        ("Qualité de l'air & Pollen",  "src.ingestion.open_meteo_air",     "ingest"),
         ("Connectivité & Télétravail", "src.ingestion.connectivity",       "ingest"),
         ("Santé Environnementale",     "src.ingestion.health_environment", "ingest"),
         ("Tranquillité vs Dynamisme",  "src.ingestion.tranquility",        "ingest"),
         ("Référentiel Transport ICAR", "src.ingestion.icar_referentiel",   "ingest_icar"),
     ]
-    logger.info(">>> BRONZE — indicateurs stratégiques (3 sources statiques)")
+    logger.info(">>> BRONZE — indicateurs stratégiques (sources statiques)")
     for label, module_path, func_name in indicators:
         logger.info("  [%s]", label)
         try:

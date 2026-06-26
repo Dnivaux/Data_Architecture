@@ -28,14 +28,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.dependencies import get_db_status, verify_db_connection
 from api.routers import (
-    chantiers, comparison, connectivity, live, mobility, poi, prices, scores, social_housing,
+    chantiers, comparison, connectivity, iris, live, mobility, poi, prices, scores, social_housing,
 )
 from api.schemas import HealthCheck, HealthCheckExtended
-from api.security import install_rate_limiting, require_api_key
+from api.security import APP_ENV, enforce_startup_security, install_rate_limiting, require_api_key
 
 # ---------------------------------------------------------------------------
 # Logging structuré (format : timestamp | level | logger | message)
@@ -55,10 +57,13 @@ logger = logging.getLogger("api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup : vérifie la connexion PostgreSQL. Shutdown : libère le pool."""
+    """Startup : garde-fou sécurité + connexion PostgreSQL. Shutdown : libère le pool."""
     logger.info("=" * 60)
-    logger.info("Urban Data Explorer API — démarrage")
+    logger.info("Urban Data Explorer API — démarrage (env=%s)", APP_ENV)
     logger.info("=" * 60)
+
+    # Fail-closed : en production, refuse de démarrer sans clés d'API.
+    enforce_startup_security()
 
     db_ok = verify_db_connection()
     if not db_ok:
@@ -86,6 +91,10 @@ async def lifespan(app: FastAPI):
 # Application
 # ---------------------------------------------------------------------------
 
+# En production, on masque la documentation interactive et le schéma OpenAPI
+# (réduction de la surface d'exposition / fingerprinting). Activable via ENABLE_DOCS=1.
+_DOCS_ENABLED = APP_ENV != "production" or os.environ.get("ENABLE_DOCS") == "1"
+
 app = FastAPI(
     title="Urban Data Explorer API",
     description=(
@@ -94,8 +103,9 @@ app = FastAPI(
     ),
     version="2.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if _DOCS_ENABLED else None,
+    redoc_url="/redoc" if _DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if _DOCS_ENABLED else None,
 )
 
 # Quotas (rate limiting) — no-op si slowapi non installé
@@ -135,21 +145,59 @@ async def add_process_time_header(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------------
-# Middleware 2 — CORS
+# Middleware 2 — En-têtes de sécurité (defense-in-depth, OWASP Secure Headers)
 # ---------------------------------------------------------------------------
 
-_ALLOWED_ORIGINS = os.environ.get(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:8080,http://localhost:5173",
-).split(",")
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Ajoute les en-têtes de sécurité recommandés à chaque réponse."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        # API JSON : aucune ressource active n'est servie → CSP verrouillée.
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        # HSTS uniquement en production (suppose une terminaison TLS en amont).
+        if APP_ENV == "production":
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ---------------------------------------------------------------------------
+# Middleware 3 — Validation du Host header (anti Host-header injection)
+# ---------------------------------------------------------------------------
+
+_ALLOWED_HOSTS = [
+    h.strip() for h in os.environ.get("ALLOWED_HOSTS", "*").split(",") if h.strip()
+]
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
+
+# ---------------------------------------------------------------------------
+# Middleware 4 — CORS (allowlist stricte, sans wildcard)
+# ---------------------------------------------------------------------------
+
+# Allowlist explicite d'origines. PAS de "*" : combiné à allow_credentials,
+# le wildcard revient à autoriser n'importe quelle origine (faille).
+_ALLOWED_ORIGINS = [
+    o.strip() for o in os.environ.get(
+        "ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:8080,http://localhost:5173",
+    ).split(",") if o.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_ALLOWED_ORIGINS + ["*"],  # * restreint en prod via env
-    allow_credentials=True,
-    allow_methods=["GET", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["X-Process-Time"],  # expose le header aux clients JS
+    allow_origins=_ALLOWED_ORIGINS,          # allowlist stricte (aucun wildcard)
+    allow_credentials=False,                 # l'API s'authentifie par en-tête X-API-Key, pas par cookie
+    allow_methods=["GET", "OPTIONS"],        # API en lecture seule
+    allow_headers=["X-API-Key", "Content-Type"],
+    expose_headers=["X-Process-Time", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
+    max_age=600,
 )
 
 # ---------------------------------------------------------------------------
@@ -161,6 +209,7 @@ app.add_middleware(
 _auth = [Depends(require_api_key)]
 
 app.include_router(scores.router,       prefix="/api", dependencies=_auth)
+app.include_router(iris.router,         prefix="/api", dependencies=_auth)
 app.include_router(poi.router,          prefix="/api", dependencies=_auth)
 app.include_router(prices.router,       prefix="/api", dependencies=_auth)
 app.include_router(comparison.router,   prefix="/api", dependencies=_auth)

@@ -55,7 +55,6 @@ def _build_detail_from_row(row) -> ArrondissementDetail:
         geometry_wkt=row.get("geometry_wkt"),
         anime_score=_safe(row, "anime_score"),
         calme_score=_safe(row, "calme_score"),
-        accessibilite_score=_safe(row, "accessibilite_score"),
         connectivity_score=_safe(row, "connectivity_score"),
         mobility_score=_safe(row, "mobility_score"),
         health_env_score=_safe(row, "health_env_score"),
@@ -82,7 +81,12 @@ def _build_detail_from_row(row) -> ArrondissementDetail:
         noise_lden_surface_ha=_safe(row, "noise_lden_surface_ha"),
         nb_bars=_safe(row, "nb_bars", int),
         nb_nightclubs=_safe(row, "nb_nightclubs", int),
+        cinema_count=_safe(row, "cinema_count", int),
+        restaurant_count=_safe(row, "restaurant_count", int),
+        stadium_count=_safe(row, "stadium_count", int),
+        museum_count=_safe(row, "museum_count", int),
         median_price=_safe(row, "median_price"),
+        median_income=_safe(row, "median_income"),
         nombre_logements_sociaux=_safe(row, "nombre_logements_sociaux", int),
     )
 
@@ -93,7 +97,6 @@ def _build_score_from_row(row) -> ArrondissementScore:
         arrondissement=int(row["arrondissement"]),
         anime_score=float(_safe(row, "anime_score") or 0),
         calme_score=float(_safe(row, "calme_score") or 0),
-        accessibilite_score=float(_safe(row, "accessibilite_score") or 0),
         connectivity_score=_safe(row, "connectivity_score"),
         mobility_score=_safe(row, "mobility_score"),
         health_env_score=_safe(row, "health_env_score"),
@@ -102,7 +105,12 @@ def _build_score_from_row(row) -> ArrondissementScore:
         bar_count=int(_safe(row, "bar_count", int) or 0),
         nightclub_count=int(_safe(row, "nb_nightclubs", int) or 0),
         park_count=int(_safe(row, "park_count", int) or 0),
+        cinema_count=int(_safe(row, "cinema_count", int) or 0),
+        restaurant_count=int(_safe(row, "restaurant_count", int) or 0),
+        stadium_count=int(_safe(row, "stadium_count", int) or 0),
+        museum_count=int(_safe(row, "museum_count", int) or 0),
         median_price=_safe(row, "median_price"),
+        median_income=_safe(row, "median_income"),
         social_housing_pct=None,
         nombre_logements_sociaux=_safe(row, "nombre_logements_sociaux", int),
     )
@@ -130,13 +138,16 @@ def get_all_scores(db: Session = Depends(get_db)) -> list[ArrondissementScore]:
                 SELECT arrondissement,
                     COALESCE(anime_score,         0)::real AS anime_score,
                     COALESCE(calme_score,         0)::real AS calme_score,
-                    COALESCE(accessibilite_score, 0)::real AS accessibilite_score,
                     connectivity_score, mobility_score, health_env_score,
                     tranquility_score,  livability_score,
-                    COALESCE(bar_count,     0)::int AS bar_count,
-                    COALESCE(nb_nightclubs, 0)::int AS nb_nightclubs,
-                    COALESCE(park_count,    0)::int AS park_count,
-                    median_price, nombre_logements_sociaux
+                    COALESCE(bar_count,        0)::int AS bar_count,
+                    COALESCE(nb_nightclubs,    0)::int AS nb_nightclubs,
+                    COALESCE(park_count,       0)::int AS park_count,
+                    COALESCE(cinema_count,     0)::int AS cinema_count,
+                    COALESCE(restaurant_count, 0)::int AS restaurant_count,
+                    COALESCE(stadium_count,    0)::int AS stadium_count,
+                    COALESCE(museum_count,     0)::int AS museum_count,
+                    median_price, median_income, nombre_logements_sociaux
                 FROM gold_arrondissement_summary ORDER BY arrondissement
             """)
         ).mappings().all()
@@ -168,7 +179,7 @@ def get_indicator_scores(db: Session = Depends(get_db)) -> list[ArrondissementDe
             text("""
                 SELECT
                     s.arrondissement, s.nom_arrondissement, s.geometry_wkt,
-                    s.anime_score, s.calme_score, s.accessibilite_score,
+                    s.anime_score, s.calme_score,
                     s.connectivity_score, s.mobility_score, s.health_env_score,
                     s.tranquility_score,  s.livability_score,
                     m.pct_eligible_ftth,   m.pct_pop_4g_mean, m.pct_t2_t3,
@@ -177,7 +188,10 @@ def get_indicator_scores(db: Session = Depends(get_db)) -> list[ArrondissementDe
                     m.nb_ilots_fraicheur,  m.surface_fraicheur_ha, m.arbres_per_km2,
                     m.european_aqi, m.pollen_total, m.pollen_risk,
                     m.crime_count_total,   m.crime_rate_per_1000, m.noise_lden_surface_ha,
-                    m.nb_bars, m.nb_nightclubs, m.median_price,
+                    m.nb_bars, m.nb_nightclubs,
+                    m.cinema_count, m.restaurant_count, m.stadium_count, m.museum_count,
+                    m.median_price,
+                    m.median_income,
                     m.nombre_logements_sociaux
                 FROM gold_indicator_scores s
                 LEFT JOIN gold_arrondissement_summary m USING (arrondissement)
@@ -213,13 +227,17 @@ def get_arrondissement_score(
                 SELECT arrondissement,
                     COALESCE(anime_score,         0)::real AS anime_score,
                     COALESCE(calme_score,         0)::real AS calme_score,
-                    COALESCE(accessibilite_score, 0)::real AS accessibilite_score,
                     connectivity_score, mobility_score, health_env_score,
                     tranquility_score,  livability_score,
-                    COALESCE(bar_count,     0)::int AS bar_count,
-                    COALESCE(nb_nightclubs, 0)::int AS nb_nightclubs,
-                    COALESCE(park_count,    0)::int AS park_count,
-                    median_price
+                    COALESCE(bar_count,        0)::int AS bar_count,
+                    COALESCE(nb_nightclubs,    0)::int AS nb_nightclubs,
+                    COALESCE(park_count,       0)::int AS park_count,
+                    COALESCE(cinema_count,     0)::int AS cinema_count,
+                    COALESCE(restaurant_count, 0)::int AS restaurant_count,
+                    COALESCE(stadium_count,    0)::int AS stadium_count,
+                    COALESCE(museum_count,     0)::int AS museum_count,
+                    median_price,
+                    median_income
                 FROM gold_arrondissement_summary WHERE arrondissement = :arr
             """),
             {"arr": arrondissement},

@@ -579,10 +579,12 @@ def _fetch_canopee(
 
 def ingest() -> pd.DataFrame:
     """
-    Ingère les trois sources de l'indicateur Santé Environnementale.
+    Ingère les sources végétales de l'indicateur Santé Environnementale.
+
+    La qualité de l'air n'est plus ingérée ici : elle provient d'Open-Meteo
+    (src/ingestion/open_meteo_air.py), pour éviter d'écraser le Bronze air_quality.
 
     Sauvegarde :
-      data/bronze/airparif_stations/date=<date>/part-0.parquet
       data/bronze/paris_ilots_fraicheur/date=<date>/part-0.parquet
       data/bronze/paris_canopee/date=<date>/part-0.parquet
 
@@ -601,19 +603,12 @@ def ingest() -> pd.DataFrame:
 
     session = build_session(retries=3, backoff_factor=1.0, timeout=30)
 
-    # --- Source 1 : Airparif indices Citeair ---
-    logger.info(">>> Source 1/3 : Airparif — Indices Citeair (data.gouv.fr)")
-    df_atmo = _fetch_airparif_atmo(session, logger, ingested_at)
-    if not df_atmo.empty:
-        path = save_parquet(df_atmo, "air_quality",
-                            partition_col="date", partition_value=run_date,
-                            filename="part-0.parquet")
-        logger.info("Airparif ATMO → %d lignes : %s", len(df_atmo), path)
-    else:
-        logger.warning("Airparif ATMO : aucune donnée — Bronze air_quality non créé")
+    # NB : la qualité de l'air provient désormais d'Open-Meteo
+    # (src/ingestion/open_meteo_air.py → european_aqi + pollen). L'ancien fetch
+    # Airparif Citeair a été retiré ici pour ne plus écraser le Bronze air_quality.
 
-    # --- Source 2 : Îlots de fraîcheur ---
-    logger.info(">>> Source 2/3 : Paris Open Data — Îlots de fraîcheur")
+    # --- Source 1 : Îlots de fraîcheur ---
+    logger.info(">>> Source 1/2 : Paris Open Data — Îlots de fraîcheur")
     df_ilots = _fetch_ilots_fraicheur(session, logger, ingested_at)
     if not df_ilots.empty:
         path = save_parquet(df_ilots, "paris_ilots_fraicheur",
@@ -623,8 +618,8 @@ def ingest() -> pd.DataFrame:
     else:
         logger.warning("Îlots de fraîcheur : aucune donnée — Bronze non créé")
 
-    # --- Source 3 : Canopée (arbres) ---
-    logger.info(">>> Source 3/3 : Paris Open Data — Arbres (canopée)")
+    # --- Source 2 : Canopée (arbres) ---
+    logger.info(">>> Source 2/2 : Paris Open Data — Arbres (canopée)")
     df_canopee = _fetch_canopee(session, logger, ingested_at)
     if not df_canopee.empty:
         path = save_parquet(df_canopee, "paris_canopee",
@@ -635,7 +630,7 @@ def ingest() -> pd.DataFrame:
         logger.warning("Canopée : aucune donnée — Bronze non créé")
 
     logger.info("Santé Environnementale — ingestion terminée")
-    return df_atmo
+    return df_ilots
 
 
 if __name__ == "__main__":
@@ -644,4 +639,5 @@ if __name__ == "__main__":
         print("\n--- Aperçu Îlots de fraîcheur (Bronze) ---")
         print(result.head(10).to_string(index=False))
         print(f"\nShape : {result.shape}")
-        print(f"Catégories : {sorted(result['categorie'].dropna().unique())}")
+        if "categorie" in result.columns:
+            print(f"Catégories : {sorted(result['categorie'].dropna().unique())}")

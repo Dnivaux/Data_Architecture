@@ -41,9 +41,11 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/urbandata
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DB: urbandata
-      API_KEYS: ${API_KEYS:-dev-key-123}
+      APP_ENV: ${APP_ENV:-development}                 # production → auth obligatoire + docs masqués + HSTS
+      API_KEYS: ${API_KEYS:-dev-key-123}               # ⚠️ définir des clés robustes hors dev
       RATE_LIMIT: ${RATE_LIMIT:-120/minute}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}               # restreindre au(x) domaine(s) servi(s) en prod
     ports:
       - "8000:8000"
     depends_on:
@@ -53,6 +55,94 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ============================================================
+  # Airflow — ordonnanceur du pipeline (remplace scheduler.py)
+  #   • metadata DB dédiée (airflow-postgres, isolée du PG métier)
+  #   • LocalExecutor (tâches en parallèle sur un seul nœud)
+  #   • DAGs : dags/  — code projet monté en /opt/airflow/project
+  # Lancement : docker compose up -d airflow-webserver airflow-scheduler
+  # UI : http://localhost:8080  (login : airflow / airflow)
+  # ============================================================
+  airflow-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: "30"
+      # Le pipeline écrit dans la base métier urbandata (service postgres)
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/urbandata
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: urbandata
+      PYTHONPATH: /opt/airflow/project
+    volumes: &airflow-volumes
+      - ./dags:/opt/airflow/dags
+      - ./logs/airflow:/opt/airflow/logs
+      - .:/opt/airflow/project
+    # Migration du schéma + création de l'utilisateur admin
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
+          --username airflow --password airflow \
+          --firstname Urban --lastname Data --role Admin \
+          --email admin@example.com || true
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes: *airflow-volumes
+    command: scheduler
+    restart: unless-stopped
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes: *airflow-volumes
+    ports:
+      - "8080:8080"
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
 volumes:
   pg_data:
   mongo_data:
+  airflow_pg_data:

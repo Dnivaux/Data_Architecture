@@ -136,10 +136,128 @@ def _sjoin_to_arrondissement(
     if "arrondissement" not in joined.columns:
         logger.warning("sjoin : colonne 'arrondissement' absente du résultat (%s)", list(joined.columns)[:8])
         df["arrondissement"] = pd.NA
+    vals = joined["arrondissement"].reindex(valid.index)
+    vals = vals.astype(object).where(vals.notna(), pd.NA)
+    if "arrondissement" in df.columns:
+        target_dtype = str(df["arrondissement"].dtype)
+        if target_dtype.startswith("string") or target_dtype == "str":
+            vals = vals.apply(
+                lambda x: str(int(x)) if isinstance(x, (int, float)) and pd.notna(x) else (str(x) if pd.notna(x) else pd.NA)
+            )
+        else:
+            try:
+                vals = vals.astype(df["arrondissement"].dtype)
+            except Exception:
+                pass
+    df.loc[valid.index, "arrondissement"] = vals
+    return df
+
+
+def _load_iris_gdf(logger: logging.Logger) -> gpd.GeoDataFrame:
+    """Charge les polygones IRIS depuis le Bronze iris_boundaries.
+
+    Retourne un GeoDataFrame [code_iris, arrondissement, nom_iris, geometry]
+    en EPSG:4326. Squelette des ~992 IRIS parisiens pour les jointures spatiales.
+    """
+    df = read_parquet("iris_boundaries")
+    if df.empty:
+        logger.error("Bronze iris_boundaries vide — exécuter ingest_iris_boundaries() d'abord")
+        return gpd.GeoDataFrame()
+
+    geom_col = "geometry_wkt" if "geometry_wkt" in df.columns else "geometry"
+    try:
+        geom = gpd.GeoSeries.from_wkt(df[geom_col])
+    except Exception as exc:
+        logger.error("Impossible de parser la géométrie IRIS : %s", exc)
+        return gpd.GeoDataFrame()
+
+    gdf = gpd.GeoDataFrame(df, geometry=geom, crs="EPSG:4326")
+    keep = [c for c in ["code_iris", "arrondissement", "nom_iris"] if c in gdf.columns]
+    logger.info("IRIS chargés : %d polygones", len(gdf))
+    return gdf[keep + ["geometry"]].copy()
+
+
+def _sjoin_points_to_iris(
+    df: pd.DataFrame,
+    lat_col: str,
+    lon_col: str,
+    iris_gdf: gpd.GeoDataFrame,
+    logger: logging.Logger,
+) -> pd.DataFrame:
+    """Jointure spatiale point-dans-polygone IRIS.
+
+    Retourne *df* enrichi des colonnes 'code_iris' et 'arrondissement'.
+    Généralise `_sjoin_to_arrondissement` à la maille IRIS (clé code_iris).
+    """
+    df = df.copy().reset_index(drop=True)
+    # Dédupliquer d'éventuelles colonnes en double (ex. lat/latitude des batches Vélib')
+    df = df.loc[:, ~df.columns.duplicated()]
+    if iris_gdf is None or iris_gdf.empty:
+        logger.warning("iris_gdf vide — sjoin IRIS impossible, code_iris à NA")
+        df["code_iris"] = pd.NA
+        df["arrondissement"] = pd.NA
         return df
 
-    df.loc[valid.index, "arrondissement"] = joined["arrondissement"].reindex(valid.index)
+    mask = df[lat_col].notna() & df[lon_col].notna()
+    valid = df[mask].copy()
+    if valid.empty:
+        logger.warning("Aucun point avec coordonnées valides pour le sjoin IRIS")
+        df["code_iris"] = pd.NA
+        df["arrondissement"] = pd.NA
+        return df
+
+    valid_for_join = valid.drop(columns=["code_iris", "arrondissement"], errors="ignore")
+    gdf_pts = gpd.GeoDataFrame(
+        valid_for_join,
+        geometry=gpd.points_from_xy(valid_for_join[lon_col], valid_for_join[lat_col]),
+        crs="EPSG:4326",
+    )
+    join_cols = [c for c in ["code_iris", "arrondissement"] if c in iris_gdf.columns]
+    joined = gpd.sjoin(
+        gdf_pts, iris_gdf[join_cols + ["geometry"]],
+        how="left", predicate="within",
+    )
+    joined = joined[~joined.index.duplicated(keep="first")]
+
+    for col in join_cols:
+        right = col if col in joined.columns else f"{col}_right"
+        if right in joined.columns:
+            vals = joined[right].reindex(valid.index)
+            vals = vals.astype(object).where(vals.notna(), pd.NA)
+            if col in df.columns:
+                target_dtype = str(df[col].dtype)
+                if target_dtype.startswith("string") or target_dtype == "str":
+                    vals = vals.apply(
+                        lambda x: str(int(x)) if isinstance(x, (int, float)) and pd.notna(x) else (str(x) if pd.notna(x) else pd.NA)
+                    )
+                else:
+                    try:
+                        vals = vals.astype(df[col].dtype)
+                    except Exception:
+                        pass
+            df.loc[valid.index, col] = vals
+    if "code_iris" not in df.columns:
+        df["code_iris"] = pd.NA
+    if "arrondissement" not in df.columns:
+        df["arrondissement"] = pd.NA
     return df
+
+
+def _pollen_risk_level(total: float | None) -> str | None:
+    """Niveau de risque pollinique à partir du pic total (grains/m³).
+
+    Mêmes seuils que l'ingestion Open-Meteo, recalculés ici sur la moyenne
+    par arrondissement (métrique détaillée — n'alimente aucun score).
+    """
+    if total is None or pd.isna(total):
+        return None
+    if total < 10:
+        return "Faible"
+    if total < 50:
+        return "Modéré"
+    if total < 150:
+        return "Élevé"
+    return "Très élevé"
 
 
 def _commune_to_arrondissement(commune_code: pd.Series) -> pd.Series:
@@ -490,7 +608,8 @@ def build_health_env_silver(
     Schéma sortant
     --------------
     arrondissement, nb_ilots_fraicheur, surface_fraicheur_ha,
-    nb_arbres, arbres_per_km2, avg_atmo_index, computed_at
+    nb_arbres, arbres_per_km2, european_aqi, avg_atmo_index,
+    pollen_total, pollen_risk, computed_at
     """
     log = logger or get_logger("silver.health_env", LOG_DIR)
     computed_at = datetime.now(timezone.utc)
@@ -500,9 +619,11 @@ def build_health_env_silver(
     if boundaries_gdf is None or boundaries_gdf.empty:
         boundaries_gdf = _load_boundaries_gdf(log)
 
-    # --- Qualité de l'air Citeair (Bronze air_quality — directement par arrondissement) ---
+    # --- Qualité de l'air + pollen (Bronze air_quality — Open-Meteo, par arrondissement) ---
+    # european_aqi  → alimente le score Santé Environnementale (via scoring.py)
+    # pollen_total / pollen_risk → métriques détaillées uniquement (aucun score)
     df_air = read_parquet("air_quality")
-    if not df_air.empty and {"arrondissement", "indice_atmo_num"}.issubset(df_air.columns):
+    if not df_air.empty and "arrondissement" in df_air.columns:
         df_air["arrondissement"] = pd.to_numeric(df_air["arrondissement"], errors="coerce")
         # Convertir code INSEE 75101-75120 → int 1-20 si besoin
         mask_insee = df_air["arrondissement"] > 100
@@ -511,21 +632,39 @@ def build_health_env_silver(
         df_air = df_air[df_air["arrondissement"].between(1, 20)]
         df_air["arrondissement"] = df_air["arrondissement"].astype(int)
 
-        air_agg = (
-            df_air.groupby("arrondissement")["indice_atmo_num"]
-            .mean()
-            .round(1)
-            .reset_index(name="avg_atmo_index")
-        )
-        base = base.merge(air_agg, on="arrondissement", how="left")
-        log.info(
-            "Qualité air Citeair : %d arrondissements (indice moyen=%.1f)",
-            air_agg["arrondissement"].nunique(),
-            air_agg["avg_atmo_index"].mean(),
-        )
+        # Agrégats selon le schéma Bronze disponible (Open-Meteo fournit european_aqi + pollen ;
+        # les anciennes partitions Airparif n'ont qu'indice_atmo_num → moyenne NaN-safe).
+        agg_spec: dict[str, tuple[str, str]] = {}
+        if "european_aqi" in df_air.columns:
+            agg_spec["european_aqi"] = ("european_aqi", "mean")
+        if "indice_atmo_num" in df_air.columns:
+            agg_spec["avg_atmo_index"] = ("indice_atmo_num", "mean")
+        if "pollen_total" in df_air.columns:
+            agg_spec["pollen_total"] = ("pollen_total", "mean")
+
+        if agg_spec:
+            air_agg = df_air.groupby("arrondissement").agg(**agg_spec).reset_index()
+            for col in ("european_aqi", "avg_atmo_index", "pollen_total"):
+                if col in air_agg.columns:
+                    air_agg[col] = pd.to_numeric(air_agg[col], errors="coerce").round(1)
+            # Risque pollinique dérivé du pic moyen (métrique détaillée)
+            if "pollen_total" in air_agg.columns:
+                air_agg["pollen_risk"] = air_agg["pollen_total"].apply(_pollen_risk_level)
+            base = base.merge(air_agg, on="arrondissement", how="left")
+            log.info(
+                "Qualité air : %d arrondissements (european_aqi=%s, pollen=%s)",
+                air_agg["arrondissement"].nunique(),
+                "oui" if "european_aqi" in air_agg.columns else "non",
+                "oui" if "pollen_total" in air_agg.columns else "non",
+            )
+        else:
+            log.warning("Bronze air_quality sans colonne air exploitable — colonnes air à NA")
+            for col in ["european_aqi", "avg_atmo_index", "pollen_total", "pollen_risk"]:
+                base[col] = pd.NA
     else:
-        log.warning("Bronze air_quality vide ou mal formé — avg_atmo_index à NA")
-        base["avg_atmo_index"] = pd.NA
+        log.warning("Bronze air_quality vide ou mal formé — colonnes air à NA")
+        for col in ["european_aqi", "avg_atmo_index", "pollen_total", "pollen_risk"]:
+            base[col] = pd.NA
 
     # --- Îlots de fraîcheur (cas 3 : colonne arrondissement int déjà présente) ---
     df_ilots = read_parquet("paris_ilots_fraicheur")

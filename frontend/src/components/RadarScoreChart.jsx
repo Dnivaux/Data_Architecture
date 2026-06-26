@@ -9,11 +9,19 @@ const SCORE_AXES = [
   { key: 'connectivity_score',  label: 'Connectivité' },
   { key: 'mobility_score',      label: 'Mobilité'     },
   { key: 'health_env_score',    label: 'Santé Env.'   },
-  { key: 'accessibilite_score', label: 'Accessibilité'},
 ];
 
-function buildData(score) {
-  return SCORE_AXES.map(({ key, label }) => ({
+// Axes utilisés à la maille IRIS : Connectivité et Santé Env. sont rediffusées
+// depuis l'arrondissement (constantes au sein d'un arrondissement) → inutiles
+// pour comparer deux quartiers. On ne garde que les dimensions qui varient.
+export const IRIS_SCORE_AXES = [
+  { key: 'anime_score',       label: 'Animation'    },
+  { key: 'tranquility_score', label: 'Tranquillité' },
+  { key: 'mobility_score',    label: 'Mobilité'     },
+];
+
+function buildData(score, axes) {
+  return axes.map(({ key, label }) => ({
     subject: label,
     value: score?.[key] != null ? +score[key].toFixed(1) : 0,
     fullMark: 100,
@@ -29,11 +37,11 @@ function buildData(score) {
  *   labelA    : string
  *   labelB    : string
  */
-export default function RadarScoreChart({ primary, secondary, labelA = 'Sélectionné', labelB = 'Comparé' }) {
+export default function RadarScoreChart({ primary, secondary, labelA = 'Sélectionné', labelB = 'Comparé', axes = SCORE_AXES }) {
   if (!primary) return <EmptyState />;
 
-  const dataA = buildData(primary);
-  const dataB = secondary ? buildData(secondary) : null;
+  const dataA = buildData(primary, axes);
+  const dataB = secondary ? buildData(secondary, axes) : null;
 
   // Merge pour que recharts lise un seul tableau
   const merged = dataA.map((d, i) => ({
@@ -45,42 +53,42 @@ export default function RadarScoreChart({ primary, secondary, labelA = 'Sélecti
   return (
     <ResponsiveContainer width="100%" height={260}>
       <RadarChart data={merged} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-        <PolarGrid stroke="#D0D7DE" />
+        <PolarGrid stroke="#E2E8F0" />
         <PolarAngleAxis
           dataKey="subject"
-          tick={{ fill: '#64748B', fontSize: 11 }}
+          tick={{ fill: '#475569', fontSize: 11 }}
         />
         <PolarRadiusAxis
           angle={90}
           domain={[0, 100]}
-          tick={{ fill: '#64748B', fontSize: 9 }}
+          tick={{ fill: '#475569', fontSize: 9 }}
           tickCount={4}
         />
         <Radar
           name={labelA}
           dataKey={labelA}
-          stroke="#0F4C81"
-          fill="#0F4C81"
-          fillOpacity={0.35}
+          stroke="#2563EB"
+          fill="#2563EB"
+          fillOpacity={0.2}
           strokeWidth={2}
         />
         {dataB && (
           <Radar
             name={labelB}
             dataKey={labelB}
-            stroke="#2EC4B6"
-            fill="#2EC4B6"
-            fillOpacity={0.25}
+            stroke="#10B981"
+            fill="#10B981"
+            fillOpacity={0.15}
             strokeWidth={2}
           />
         )}
         <Tooltip
-          contentStyle={{ backgroundColor: '#F4F6F9', border: '1px solid #D0D7DE', borderRadius: 8 }}
-          labelStyle={{ color: '#1E293B', fontSize: 12 }}
-          itemStyle={{ color: '#64748B', fontSize: 12 }}
+          contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
+          labelStyle={{ color: '#0F172A', fontSize: 12 }}
+          itemStyle={{ color: '#475569', fontSize: 12 }}
           formatter={(v) => [`${v} / 100`]}
         />
-        {dataB && <Legend wrapperStyle={{ fontSize: 12, color: '#64748B' }} />}
+        {dataB && <Legend wrapperStyle={{ fontSize: 12, color: '#475569' }} />}
       </RadarChart>
     </ResponsiveContainer>
   );

@@ -17,8 +17,7 @@ class ArrondissementScore(BaseModel):
 
     # --- Scores historiques ---
     anime_score:         float = Field(0.0, ge=0, le=100, description="Score d'animation (bars, clubs, parcs)")
-    calme_score:         float = Field(0.0, ge=0, le=100, description="Score de calme (criminalité inversée + air)")
-    accessibilite_score: float = Field(0.0, ge=0, le=100, description="Score d'accessibilité financière")
+    calme_score:         float = Field(0.0, ge=0, le=100, description="Score de calme (déprécié — fusionné dans tranquillité)")
 
     # --- Nouveaux scores stratégiques ---
     connectivity_score:  Optional[float] = Field(None, ge=0, le=100, description="Score connectivité fibre + 4G/5G + T2/T3")
@@ -33,7 +32,12 @@ class ArrondissementScore(BaseModel):
     bar_count:           int            = Field(0, description="Nombre de bars (OSM)")
     nightclub_count:     int            = Field(0, description="Nombre de boîtes de nuit (OSM)")
     park_count:          int            = Field(0, description="Nombre de parcs (OSM)")
+    cinema_count:        int            = Field(0, description="Nombre de cinémas (OSM)")
+    restaurant_count:    int            = Field(0, description="Nombre de restaurants (OSM)")
+    stadium_count:       int            = Field(0, description="Nombre de stades/salles de sport (OSM)")
+    museum_count:        int            = Field(0, description="Nombre de musées (OSM)")
     median_price:            Optional[float] = Field(None, description="Prix médian DVF (€/m²)")
+    median_income:           Optional[float] = Field(None, description="Revenu médian disponible INSEE (€)")
     social_housing_pct:      Optional[float] = Field(None, description="% logements sociaux (déprécié)")
     nombre_logements_sociaux: Optional[int]  = Field(None, description="Nb logements sociaux (stock total)")
 
@@ -51,7 +55,6 @@ class ArrondissementDetail(BaseModel):
     # Scores
     anime_score:         Optional[float] = None
     calme_score:         Optional[float] = None
-    accessibilite_score: Optional[float] = None
     connectivity_score:  Optional[float] = None
     mobility_score:      Optional[float] = None
     health_env_score:    Optional[float] = None
@@ -91,11 +94,51 @@ class ArrondissementDetail(BaseModel):
     nb_bars:             Optional[int]   = None
     nb_nightclubs:       Optional[int]   = None
 
+    # Métriques clés animation / dynamisme
+    cinema_count:        Optional[int]   = Field(None, description="Nb cinémas (OSM)")
+    restaurant_count:    Optional[int]   = Field(None, description="Nb restaurants (OSM)")
+    stadium_count:       Optional[int]   = Field(None, description="Nb stades/salles de sport (OSM)")
+    museum_count:        Optional[int]   = Field(None, description="Nb musées (OSM)")
+
     # Prix
     median_price:        Optional[float] = Field(None, description="Prix médian DVF (€)")
 
+    # Revenu
+    median_income:       Optional[float] = Field(None, description="Revenu médian disponible INSEE (€)")
+
     # Logement social
     nombre_logements_sociaux: Optional[int] = Field(None, description="Nb logements sociaux (dernière année)")
+
+
+# ---------------------------------------------------------------------------
+# Scores IRIS (grain primaire ~992 zones)
+# ---------------------------------------------------------------------------
+
+class IrisDetail(BaseModel):
+    """
+    Vue détaillée d'un IRIS : scores + métriques brutes + géométrie WKT.
+    Grain primaire de l'application (l'arrondissement reste dimension parente).
+    Utilisée pour la choroplèthe infra-arrondissement sur carte.
+    """
+
+    code_iris:           str            = Field(..., description="Code IRIS INSEE 9 chiffres")
+    arrondissement:      Optional[int]  = Field(None, ge=1, le=20, description="Arrondissement parent")
+    nom_iris:            Optional[str]  = Field(None, description="Libellé IRIS")
+    geometry_wkt:        Optional[str]  = Field(None, description="Polygone WKT EPSG:4326")
+
+    # Scores (normalisés sur ~992 IRIS)
+    anime_score:         Optional[float] = None
+    connectivity_score:  Optional[float] = None
+    mobility_score:      Optional[float] = None
+    health_env_score:    Optional[float] = None
+    tranquility_score:   Optional[float] = None
+    livability_score:    Optional[float] = None
+
+    # Métriques brutes IRIS-natives (fortement discriminantes)
+    median_price:        Optional[float] = Field(None, description="Prix médian DVF (€/m²)")
+    median_income:       Optional[float] = Field(None, description="Revenu médian disponible INSEE (€)")
+    gini_coefficient:    Optional[float] = Field(None, description="Indice de Gini")
+    poverty_rate:        Optional[float] = Field(None, description="Taux de pauvreté (%)")
 
 
 # ---------------------------------------------------------------------------

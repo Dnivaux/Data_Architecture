@@ -3,7 +3,7 @@ import { MapContainer, GeoJSON, TileLayer, useMap, CircleMarker, Popup } from 'r
 import L from 'leaflet';
 import wellknown from 'wellknown';
 import { indicatorColor } from '../utils/scoreColors';
-import { INDICATOR_OPTIONS } from './Sidebar';
+import { INDICATOR_OPTIONS, IRIS_SUPPORTED_INDICATORS } from './Sidebar';
 
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR =
@@ -25,6 +25,7 @@ const INDICATOR_ICONS = {
   european_aqi: 'air',
   pollen_total: 'grass',
   median_price: 'payments',
+  median_income: 'euro',
 };
 
 // Indicateurs en valeur brute « bas = mieux » (échelle inversée pour la légende)
@@ -49,9 +50,12 @@ function MapViewController({ fitBounds, resetSignal }) {
 // ─────────────────────────────────────────────────────────────────
 export default function InteractiveMap({
   indicators,
+  iris,
   selectedIndicator,
   selectedArrondissement,
   onSelectArrondissement,
+  selectedIris,
+  onSelectIris,
   chantiers,
   showChantiers,
 }) {
@@ -126,16 +130,103 @@ export default function InteractiveMap({
     [indicators, selectedIndicator],
   );
 
+  // ── Couche IRIS (grain fin) — drill-down ──────────────────────
+  // Logique « vue d'ensemble → détail » : la maille IRIS n'apparaît QUE lorsqu'un
+  // arrondissement est sélectionné. La vue globale reste une choroplèthe par
+  // arrondissement ; le clic sur un arrondissement révèle ses IRIS.
+  const irisInArr = useMemo(
+    () => (selectedArrondissement
+      ? (iris ?? []).filter((d) => d.arrondissement === selectedArrondissement)
+      : []),
+    [iris, selectedArrondissement],
+  );
+
+  const irisActive = useMemo(
+    () => IRIS_SUPPORTED_INDICATORS.has(selectedIndicator) && irisInArr.length > 0,
+    [irisInArr, selectedIndicator],
+  );
+
+  // Normalisation des couleurs DANS l'arrondissement sélectionné (contraste local
+  // pour les indicateurs min-max : prix, revenu médian).
+  const irisValues = useMemo(
+    () => irisInArr.map((d) => d[selectedIndicator]).filter((v) => v != null),
+    [irisInArr, selectedIndicator],
+  );
+
+  // GeoJSON IRIS (WKT → Features) limité à l'arrondissement sélectionné
+  const irisGeoJSON = useMemo(() => {
+    if (!irisActive) return null;
+    const features = irisInArr
+      .map((d) => {
+        if (!d.geometry_wkt) return null;
+        const geometry = wellknown.parse(d.geometry_wkt);
+        if (!geometry) return null;
+        return {
+          type: 'Feature',
+          geometry,
+          properties: {
+            code_iris:      d.code_iris,
+            arrondissement: d.arrondissement,
+            nom:            d.nom_iris,
+            value:          d[selectedIndicator] ?? null,
+          },
+        };
+      })
+      .filter(Boolean);
+    return features.length ? { type: 'FeatureCollection', features } : null;
+  }, [irisActive, irisInArr, selectedIndicator]);
+
   // ── Style choroplèthe arrondissements ─────────────────────────
+  // Quand la couche IRIS est active, l'arrondissement devient un simple contour
+  // de contexte (pas de remplissage), pour laisser voir le détail IRIS.
   function styleFeature(feature) {
     const { arrondissement, value } = feature.properties;
     const isSelected = arrondissement === selectedArrondissement;
+    if (irisActive) {
+      return {
+        fillOpacity: 0,
+        color:       isSelected ? '#1D4ED8' : '#475569',
+        weight:      isSelected ? 3.5 : 1.75,
+      };
+    }
     return {
       fillColor:   indicatorColor(selectedIndicator, value, allValues),
       fillOpacity: isSelected ? 0.88 : 0.72,
-      color:       isSelected ? '#0F4C81' : '#9AA6B2',
+      color:       isSelected ? '#2563EB' : '#CBD5E1',
       weight:      isSelected ? 3 : 1.25,
     };
+  }
+
+  // ── Style + interactions choroplèthe IRIS ─────────────────────
+  function styleIrisFeature(feature) {
+    const { value, code_iris } = feature.properties;
+    const isSel = code_iris === selectedIris;
+    return {
+      fillColor:   indicatorColor(selectedIndicator, value, irisValues),
+      fillOpacity: isSel ? 0.92 : 0.78,
+      color:       isSel ? '#1D4ED8' : '#FFFFFF',
+      weight:      isSel ? 3 : 0.4,
+    };
+  }
+
+  function onEachIrisFeature(feature, layer) {
+    const { nom, value, code_iris } = feature.properties;
+    const isSel = () => code_iris === selectedIris;
+    // Clic sur un quartier (IRIS) → sélection pour comparaison dans le panneau.
+    layer.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      if (onSelectIris) onSelectIris(isSel() ? null : code_iris);
+    });
+    layer.on('mouseover', () => layer.setStyle({ weight: 2, color: '#1D4ED8' }));
+    layer.on('mouseout',  () => layer.setStyle({
+      weight: isSel() ? 3 : 0.4,
+      color:  isSel() ? '#1D4ED8' : '#FFFFFF',
+    }));
+    layer.bindTooltip(
+      `<div style="font-size:12px;font-weight:600">${nom ?? 'IRIS'}</div>
+       <div style="font-size:11px;color:#64748B">${formatIndicatorValue(selectedIndicator, value)}</div>`,
+      { sticky: true, className: 'leaflet-tooltip-urban' },
+    );
   }
 
   // Re-style sans re-monter (sélection change)
@@ -144,14 +235,22 @@ export default function InteractiveMap({
     geoJSONRef.current.eachLayer((layer) => {
       const { arrondissement, value } = layer.feature.properties;
       const isSelected = arrondissement === selectedArrondissement;
+      if (irisActive) {
+        layer.setStyle({
+          fillOpacity: 0,
+          color:       isSelected ? '#1D4ED8' : '#475569',
+          weight:      isSelected ? 3.5 : 1.75,
+        });
+        return;
+      }
       layer.setStyle({
         fillColor:   indicatorColor(selectedIndicator, value, allValues),
         fillOpacity: isSelected ? 0.88 : 0.72,
-        color:       isSelected ? '#0F4C81' : '#9AA6B2',
+        color:       isSelected ? '#2563EB' : '#CBD5E1',
         weight:      isSelected ? 3 : 1.25,
       });
     });
-  }, [selectedArrondissement]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedArrondissement, irisActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Interactions arrondissements ──────────────────────────────
   function onEachArrFeature(feature, layer) {
@@ -164,13 +263,13 @@ export default function InteractiveMap({
     });
     layer.on('mouseover', () => {
       if (arrondissement !== selectedArrondissement)
-        layer.setStyle({ fillOpacity: 0.86, weight: 2.25, color: '#2EC4B6' });
+        layer.setStyle({ fillOpacity: 0.86, weight: 2.25, color: '#2563EB' });
     });
     layer.on('mouseout', () => {
       const isSel = arrondissement === selectedArrondissement;
       layer.setStyle({
         fillOpacity: isSel ? 0.88 : 0.72,
-        color:       isSel ? '#0F4C81' : '#9AA6B2',
+        color:       isSel ? '#2563EB' : '#CBD5E1',
         weight:      isSel ? 3 : 1.25,
       });
     });
@@ -195,7 +294,7 @@ export default function InteractiveMap({
   function onEachQuartierFeature(feature, layer) {
     const nom = feature.properties?.l_qu ?? feature.properties?.libelle ?? 'Quartier';
     // fillOpacity minuscule pour rendre la zone cliquable partout
-    layer.setStyle({ fillColor: '#2EC4B6', fillOpacity: 0.03 });
+    layer.setStyle({ fillColor: '#2563EB', fillOpacity: 0.03 });
 
     layer.on('click', async (e) => {
       L.DomEvent.stopPropagation(e); // empêche le clic arrondissement
@@ -207,11 +306,11 @@ export default function InteractiveMap({
       );
     });
 
-    layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.18, color: '#0F4C81' }));
-    layer.on('mouseout',  () => layer.setStyle({ fillOpacity: 0.03, color: '#2EC4B6' }));
+    layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.18, color: '#2563EB' }));
+    layer.on('mouseout',  () => layer.setStyle({ fillOpacity: 0.03, color: '#2563EB' }));
 
     layer.bindTooltip(
-      `<div style="font-size:11px;color:#0F4C81;font-weight:600">
+      `<div style="font-size:11px;color:#2563EB;font-weight:600">
          <span class="map-icon" style="font-size:14px;vertical-align:-2px;margin-right:4px">pin_drop</span>
          ${nom}
        </div>
@@ -245,13 +344,18 @@ export default function InteractiveMap({
       {/* Légende couleur */}
       <ColorLegend indicatorId={selectedIndicator} />
 
-      {/* Badge quartiers actifs */}
-      {selectedArrondissement && quartiersFiltered && (
-        <div className="absolute bottom-5 right-3 z-[1000] bg-[#F4F6F9]/90 border border-[#2EC4B6]/60 rounded-lg px-2 py-1 text-xs backdrop-blur-sm flex items-center gap-1.5 text-[#0F4C81]">
+      {/* Badge contextuel : maille IRIS en drill-down, sinon quartiers cliquables */}
+      {irisActive ? (
+        <div className="absolute bottom-5 right-3 z-[1000] bg-white/90 border border-blue-200 rounded-lg px-2 py-1 text-xs backdrop-blur-sm flex items-center gap-1.5 text-blue-700 shadow-sm">
+          <span className="map-icon" style={{ fontSize: 14 }}>grid_on</span>
+          <span>Maille IRIS · {irisInArr.length} zones</span>
+        </div>
+      ) : selectedArrondissement && quartiersFiltered ? (
+        <div className="absolute bottom-5 right-3 z-[1000] bg-white/90 border border-slate-200 rounded-lg px-2 py-1 text-xs backdrop-blur-sm flex items-center gap-1.5 text-slate-800 shadow-sm">
           <span className="map-icon" style={{ fontSize: 14 }}>pin_drop</span>
           <span>Quartiers cliquables</span>
         </div>
-      )}
+      ) : null}
 
       <MapContainer
         center={[48.8566, 2.3522]}
@@ -262,26 +366,39 @@ export default function InteractiveMap({
       >
         <TileLayer url={TILE_URL} attribution={TILE_ATTR} />
 
-        {/* Choroplèthe arrondissements */}
+        {/* Choroplèthe IRIS (grain fin) — peinte sous le contour arrondissement */}
+        {irisActive && irisGeoJSON && (
+          <GeoJSON
+            key={`iris-${selectedIndicator}-${selectedArrondissement ?? 'all'}-${selectedIris ?? 'none'}`}
+            data={irisGeoJSON}
+            style={styleIrisFeature}
+            onEachFeature={onEachIrisFeature}
+          />
+        )}
+
+        {/* Choroplèthe / contour arrondissements.
+            En mode IRIS, ce calque n'est qu'un contour non-interactif : il laisse
+            les clics/survols atteindre les polygones IRIS peints en dessous. */}
         {arrGeoJSON && (
           <GeoJSON
-            key={selectedIndicator}
+            key={`arr-${selectedIndicator}-${irisActive ? 'outline' : 'fill'}`}
             ref={geoJSONRef}
             data={arrGeoJSON}
             style={styleFeature}
+            interactive={!irisActive}
             onEachFeature={onEachArrFeature}
           />
         )}
 
-        {/* Quartiers du drill-down (cliquables pour précision IRIS + BAN) */}
-        {selectedArrondissement && quartiersFiltered && (
+        {/* Quartiers du drill-down (cliquables pour BAN) — uniquement hors mode IRIS */}
+        {!irisActive && selectedArrondissement && quartiersFiltered && (
           <GeoJSON
             key={`q-${selectedArrondissement}`}
             data={quartiersFiltered}
             style={{
-              fillColor:   '#2EC4B6',
+              fillColor:   '#2563EB',
               fillOpacity: 0.03,
-              color:       '#2EC4B6',
+              color:       '#2563EB',
               weight:      1.5,
               dashArray:   '6 4',
             }}
@@ -296,7 +413,7 @@ export default function InteractiveMap({
             eventHandlers={{ remove: () => setQuartierPopup(null) }}
           >
             <div style={{ minWidth: 180 }}>
-              <p style={{ fontWeight: 700, marginBottom: 4, color: '#0F4C81' }}>
+              <p style={{ fontWeight: 700, marginBottom: 4, color: '#2563EB' }}>
                 <span
                   className="map-icon"
                   style={{ fontSize: 16, verticalAlign: '-2px', marginRight: 4 }}
@@ -374,8 +491,8 @@ function ColorLegend({ indicatorId }) {
   const isPrice = LOWER_BETTER.has(indicatorId);
 
   return (
-    <div className="absolute bottom-5 left-3 z-[1000] bg-[#F4F6F9]/95 border border-[#B6C0CC] rounded-lg px-3 py-2 text-xs backdrop-blur-sm">
-      <p className="text-[#64748B] mb-1.5 font-medium flex items-center gap-1.5">
+    <div className="absolute bottom-5 left-3 z-[1000] bg-white/95 border border-slate-200 rounded-lg px-3 py-2 text-xs backdrop-blur-sm shadow-sm">
+      <p className="text-slate-500 mb-1.5 font-medium flex items-center gap-1.5">
         <span className="material-icon text-base" style={{ verticalAlign: '-3px' }}>
           {icon}
         </span>
@@ -383,14 +500,14 @@ function ColorLegend({ indicatorId }) {
       </p>
       <div className="flex items-center gap-1.5">
         <div
-          className="w-16 h-2 rounded-full"
+          className="w-20 h-2 rounded-full"
           style={{
             background: isPrice
-              ? 'linear-gradient(to right, #00A3FF, #0F3B81)'
-              : 'linear-gradient(to right, #0F3B81, #1974D2, #00A3FF)',
+              ? 'linear-gradient(to right, #10B981, #84CC16, #FACC15, #F97316, #EF4444)'
+              : 'linear-gradient(to right, #EF4444, #F97316, #FACC15, #84CC16, #10B981)',
           }}
         />
-        <span className="text-[#64748B]">{isPrice ? 'Bas → Élevé' : '0 → 100'}</span>
+        <span className="text-slate-500">{isPrice ? 'Bas → Élevé' : '0 → 100'}</span>
       </div>
     </div>
   );

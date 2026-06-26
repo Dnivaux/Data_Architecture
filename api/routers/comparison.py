@@ -4,6 +4,8 @@ Source : PostgreSQL table gold_arrondissement_summary.
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -12,13 +14,14 @@ from api.dependencies import get_db
 from api.routers.scores import _row_to_score
 from api.schemas import ArrondissementComparison
 
+logger = logging.getLogger("api.comparison")
+
 router = APIRouter(prefix="/comparison", tags=["comparison"])
 
 _SCORE_COLS = """
     arrondissement,
     COALESCE(anime_score,         0)::real  AS anime_score,
     COALESCE(calme_score,         0)::real  AS calme_score,
-    COALESCE(accessibilite_score, 0)::real  AS accessibilite_score,
     connectivity_score,
     mobility_score,
     health_env_score,
@@ -28,6 +31,7 @@ _SCORE_COLS = """
     COALESCE(nb_nightclubs,    0)::int  AS nightclub_count,
     COALESCE(park_count,       0)::int  AS park_count,
     median_price,
+    median_income,
     NULL::real                          AS social_housing_pct
 """
 
@@ -63,7 +67,10 @@ def compare_arrondissements(
             {"a": a, "b": b},
         ).mappings().all()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
+        # Ne PAS exposer l'exception brute au client (fuite d'info : schéma,
+        # versions, chemins). On log côté serveur, message générique côté client.
+        logger.error("GET /comparison — erreur base de données : %s", exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service de données indisponible")
 
     row_map = {int(r["arrondissement"]): r for r in rows}
 
@@ -84,13 +91,9 @@ def compare_arrondissements(
     if pa is not None and pb is not None:
         price_diff = round(float(pb) - float(pa), 2)
 
-    # Différence de vivabilité composite (livability_score en priorité, sinon moyenne des 3)
-    lv_a = score_a.livability_score or (
-        (score_a.anime_score + score_a.calme_score + score_a.accessibilite_score) / 3
-    )
-    lv_b = score_b.livability_score or (
-        (score_b.anime_score + score_b.calme_score + score_b.accessibilite_score) / 3
-    )
+    # Différence de vivabilité composite (livability_score en priorité, sinon repli anime)
+    lv_a = score_a.livability_score or score_a.anime_score
+    lv_b = score_b.livability_score or score_b.anime_score
     livability_diff = round(lv_b - lv_a, 2)
 
     return ArrondissementComparison(
@@ -121,7 +124,7 @@ def get_ranking(
     db: Session = Depends(get_db),
 ) -> list[dict]:
     _allowed = {
-        "livability_score", "anime_score", "calme_score", "accessibilite_score",
+        "livability_score", "anime_score", "calme_score",
         "connectivity_score", "mobility_score", "health_env_score", "tranquility_score",
     }
     if score_field not in _allowed:
@@ -139,7 +142,6 @@ def get_ranking(
                 ROUND(COALESCE(livability_score,   0)::numeric, 1) AS livability_score,
                 ROUND(COALESCE(anime_score,         0)::numeric, 1) AS anime_score,
                 ROUND(COALESCE(calme_score,         0)::numeric, 1) AS calme_score,
-                ROUND(COALESCE(accessibilite_score, 0)::numeric, 1) AS accessibilite_score,
                 ROUND(COALESCE(connectivity_score,  0)::numeric, 1) AS connectivity_score,
                 ROUND(COALESCE(mobility_score,      0)::numeric, 1) AS mobility_score,
                 ROUND(COALESCE(health_env_score,    0)::numeric, 1) AS health_env_score,
@@ -149,6 +151,9 @@ def get_ranking(
             ORDER BY {score_field} DESC NULLS LAST
         """)).mappings().all()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Erreur base de données : {exc}")
+        # Ne PAS exposer l'exception brute au client (fuite d'info : schéma,
+        # versions, chemins). On log côté serveur, message générique côté client.
+        logger.error("GET /comparison — erreur base de données : %s", exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service de données indisponible")
 
     return [dict(row) for row in rows]

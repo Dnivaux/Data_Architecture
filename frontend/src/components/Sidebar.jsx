@@ -11,7 +11,16 @@ export const INDICATOR_OPTIONS = [
   { id: 'european_aqi',       label: "Qualité de l'air",      icon: 'air',  desc: 'Indice européen AQI (Open-Meteo / CAMS)' },
   { id: 'pollen_total',       label: 'Pollen',                icon: 'grass', desc: 'Pic pollinique journalier (Open-Meteo)' },
   { id: 'median_price',       label: 'Prix m² médian',        icon: 'payments' },
+  { id: 'median_income',      label: 'Revenu médian (INSEE)', icon: 'euro', desc: 'Revenu disponible médian INSEE FiLoSoFi' },
 ];
+
+// Indicateurs réellement disponibles à la maille IRIS (les autres — qualité de
+// l'air, pollen — ne sont publiés qu'à l'arrondissement et restent en repli).
+export const IRIS_SUPPORTED_INDICATORS = new Set([
+  'livability_score', 'connectivity_score', 'mobility_score',
+  'health_env_score', 'tranquility_score', 'anime_score',
+  'median_price', 'median_income',
+]);
 
 /**
  * Sidebar gauche : filtres globaux + statistiques Paris + statut live.
