@@ -12,6 +12,7 @@ export const INDICATOR_OPTIONS = [
   { id: 'pollen_total',       label: 'Pollen',                icon: 'grass', desc: 'Pic pollinique journalier (Open-Meteo)' },
   { id: 'median_price',       label: 'Prix m² médian',        icon: 'payments' },
   { id: 'median_income',      label: 'Revenu médian (INSEE)', icon: 'euro', desc: 'Revenu disponible médian INSEE FiLoSoFi' },
+  { id: 'affordability',      label: 'Accessibilité logement',icon: 'real_estate_agent', desc: 'm² achetables avec 1 an de revenu médian (prix DVF vs revenu INSEE)' },
 ];
 
 // Indicateurs réellement disponibles à la maille IRIS (les autres — qualité de
@@ -19,7 +20,7 @@ export const INDICATOR_OPTIONS = [
 export const IRIS_SUPPORTED_INDICATORS = new Set([
   'livability_score', 'connectivity_score', 'mobility_score',
   'health_env_score', 'tranquility_score', 'anime_score',
-  'median_price', 'median_income',
+  'median_price', 'median_income', 'affordability',
 ]);
 
 /**

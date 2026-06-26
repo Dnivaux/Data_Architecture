@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS gold_arrondissement_summary (
     -- Métriques historiques
     median_price            REAL,
     median_income           REAL,
+    nombre_logements_sociaux INTEGER,
     bar_count               INTEGER,
     park_count              INTEGER,
     -- Métriques animation / dynamisme (OSM)
@@ -222,6 +223,40 @@ CREATE TABLE IF NOT EXISTS gold_iris_indicator_scores (
 );
 """
 
+_DDL_HOUSING_TYPOLOGY = """
+CREATE TABLE IF NOT EXISTS gold_housing_typology (
+    arrondissement          SMALLINT    PRIMARY KEY,
+    nb_total                INTEGER,
+    nb_t1                   INTEGER,
+    nb_t2                   INTEGER,
+    nb_t3                   INTEGER,
+    nb_t4                   INTEGER,
+    nb_t5p                  INTEGER,
+    pct_t1                  REAL,
+    pct_t2                  REAL,
+    pct_t3                  REAL,
+    pct_t4                  REAL,
+    pct_t5p                 REAL,
+    nb_appartement          INTEGER,
+    nb_maison               INTEGER,
+    pct_appartement         REAL,
+    pct_maison              REAL,
+    nb_surf_lt30            INTEGER,
+    nb_surf_30_50           INTEGER,
+    nb_surf_50_70           INTEGER,
+    nb_surf_70_100          INTEGER,
+    nb_surf_gte100          INTEGER,
+    pct_surf_lt30           REAL,
+    pct_surf_30_50          REAL,
+    pct_surf_50_70          REAL,
+    pct_surf_70_100         REAL,
+    pct_surf_gte100         REAL,
+    median_surface          REAL,
+    mean_surface            REAL,
+    updated_at              TIMESTAMPTZ
+);
+"""
+
 # Colonnes constituant la clé primaire de chaque table (pour l'upsert)
 _PK_COLUMNS: dict[str, list[str]] = {
     "gold_arrondissement_summary": ["arrondissement"],
@@ -231,6 +266,7 @@ _PK_COLUMNS: dict[str, list[str]] = {
     "gold_social_housing_timeline":["arrondissement", "annee"],
     "gold_iris_summary":           ["code_iris"],
     "gold_iris_indicator_scores":  ["code_iris"],
+    "gold_housing_typology":       ["arrondissement"],
 }
 
 _DDL_MAP = {
@@ -241,6 +277,7 @@ _DDL_MAP = {
     "gold_social_housing_timeline":_DDL_SOCIAL_HOUSING_TIMELINE,
     "gold_iris_summary":           _DDL_IRIS_SUMMARY,
     "gold_iris_indicator_scores":  _DDL_IRIS_INDICATOR_SCORES,
+    "gold_housing_typology":       _DDL_HOUSING_TYPOLOGY,
 }
 
 
@@ -476,6 +513,7 @@ def export_all(
         ("social_housing_timeline.parquet",    "gold_social_housing_timeline"),
         ("iris_summary.parquet",               "gold_iris_summary"),
         ("iris_indicator_scores.parquet",      "gold_iris_indicator_scores"),
+        ("housing_typology.parquet",           "gold_housing_typology"),
     ]
 
     if tables:

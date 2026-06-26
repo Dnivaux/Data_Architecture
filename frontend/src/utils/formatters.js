@@ -57,6 +57,31 @@ export const fmtArrondissement = (n) => {
   return n === 1 ? '1er arrondissement' : `${n}e arrondissement`;
 };
 
+/**
+ * Indice d'accessibilité au logement : m² achetables avec 1 an de revenu
+ * disponible médian (INSEE) au prix médian au m² (DVF).
+ *   affordability = revenu_médian_annuel / prix_médian_m²
+ * Plus la valeur est élevée, plus le logement est accessible (= « vert »).
+ * Répond à l'attendu consigne : mettre en relation prix et revenus locaux.
+ */
+export const computeAffordability = (medianIncome, medianPrice) =>
+  medianIncome != null && medianPrice
+    ? +(medianIncome / medianPrice).toFixed(2)
+    : null;
+
+/** Ajoute le champ calculé `affordability` à chaque enregistrement. */
+export const withAffordability = (rows) =>
+  Array.isArray(rows)
+    ? rows.map((d) => ({
+        ...d,
+        affordability: computeAffordability(d.median_income, d.median_price),
+      }))
+    : rows;
+
+/** 2.47 → "2,5 m²/an" (m² achetables avec 1 an de revenu médian) */
+export const fmtAffordability = (v) =>
+  v != null ? `${FR.format(+v.toFixed(1))} m²/an` : '—';
+
 export const ARRONDISSEMENT_NAMES = {
   1: 'Louvre', 2: 'Bourse', 3: 'Temple', 4: 'Hôtel-de-Ville',
   5: 'Panthéon', 6: 'Luxembourg', 7: 'Palais-Bourbon', 8: 'Élysée',

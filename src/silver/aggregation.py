@@ -75,6 +75,96 @@ def aggregate_prices_by_arrondissement() -> pd.DataFrame:
     return grouped
 
 
+def aggregate_housing_typology_by_arrondissement() -> pd.DataFrame:
+    """Répartition du parc immobilier transigé (DVF) par arrondissement.
+
+    Produit, par arrondissement (+ une ligne « Paris entier » à arrondissement=0) :
+      - répartition par typologie T1..T5+ (déduite du nombre de pièces principales)
+      - répartition par type de bien (Appartement / Maison)
+      - répartition par tranche de surface (m²)
+      - surface médiane et moyenne
+
+    Répond à l'attendu consigne : « la répartition du parc immobilier selon les
+    types de logements et les surfaces ». Source : data/bronze/dvf_clean
+    (transactions parisiennes résidentielles, toutes années confondues).
+    """
+    dvf = read_parquet("dvf_clean")
+    if dvf.empty:
+        return pd.DataFrame()
+
+    dvf = dvf.copy()
+    dvf["arrondissement"] = pd.to_numeric(
+        dvf["code_postal"].astype(str).str[-2:], errors="coerce"
+    ).astype("Int64")
+    dvf["surface_reelle_bati"] = pd.to_numeric(dvf["surface_reelle_bati"], errors="coerce")
+    dvf["nombre_pieces_principales"] = pd.to_numeric(
+        dvf["nombre_pieces_principales"], errors="coerce"
+    )
+
+    # Filtre qualité : arrondissement parisien valide, surface plausible (≥ 9 m²
+    # = minimum habitable légal, ≤ 1000 m² pour écarter les valeurs aberrantes),
+    # au moins une pièce principale renseignée.
+    dvf = dvf[
+        dvf["arrondissement"].between(1, 20)
+        & (dvf["surface_reelle_bati"] >= 9)
+        & (dvf["surface_reelle_bati"] <= 1000)
+        & (dvf["nombre_pieces_principales"] >= 1)
+    ].copy()
+    if dvf.empty:
+        return pd.DataFrame()
+
+    # Typologie T1..T5+ (5 pièces et plus regroupées)
+    dvf["typologie"] = (
+        dvf["nombre_pieces_principales"].clip(upper=5)
+        .map({1: "t1", 2: "t2", 3: "t3", 4: "t4", 5: "t5p"})
+    )
+    # Tranches de surface (bornes en m², fermées à gauche)
+    _bands = [0, 30, 50, 70, 100, 1e9]
+    _band_labels = ["surf_lt30", "surf_30_50", "surf_50_70", "surf_70_100", "surf_gte100"]
+    dvf["surface_band"] = pd.cut(
+        dvf["surface_reelle_bati"], bins=_bands, labels=_band_labels, right=False
+    )
+    dvf["type_norm"] = (
+        dvf["type_local"].map({"Appartement": "appartement", "Maison": "maison"})
+        .fillna("appartement")
+    )
+
+    def _profile(group: pd.DataFrame) -> dict:
+        n = len(group)
+        out: dict = {"nb_total": n}
+        typ = group["typologie"].value_counts()
+        for t in ["t1", "t2", "t3", "t4", "t5p"]:
+            c = int(typ.get(t, 0))
+            out[f"nb_{t}"] = c
+            out[f"pct_{t}"] = round(100 * c / n, 1) if n else 0.0
+        tl = group["type_norm"].value_counts()
+        for t in ["appartement", "maison"]:
+            c = int(tl.get(t, 0))
+            out[f"nb_{t}"] = c
+            out[f"pct_{t}"] = round(100 * c / n, 1) if n else 0.0
+        sb = group["surface_band"].value_counts()
+        for b in _band_labels:
+            c = int(sb.get(b, 0))
+            out[f"nb_{b}"] = c
+            out[f"pct_{b}"] = round(100 * c / n, 1) if n else 0.0
+        out["median_surface"] = round(float(group["surface_reelle_bati"].median()), 1)
+        out["mean_surface"] = round(float(group["surface_reelle_bati"].mean()), 1)
+        return out
+
+    rows = []
+    for arr, group in dvf.groupby("arrondissement"):
+        prof = _profile(group)
+        prof["arrondissement"] = int(arr)
+        rows.append(prof)
+    # Ligne agrégée « Paris entier » (arrondissement = 0) pour la vue globale
+    paris = _profile(dvf)
+    paris["arrondissement"] = 0
+    rows.append(paris)
+
+    result = pd.DataFrame(rows).sort_values("arrondissement").reset_index(drop=True)
+    return result
+
+
 def aggregate_social_housing_by_year() -> pd.DataFrame:
     """
     Évolution du parc social financé par arrondissement × année.
@@ -214,6 +304,13 @@ def build_silver_layer() -> None:
             _save(sh_timeline, "social_housing_by_year.parquet", logger)
     except Exception as exc:
         logger.error("Erreur agrégation logements sociaux : %s", exc, exc_info=True)
+
+    try:
+        typology = aggregate_housing_typology_by_arrondissement()
+        if not typology.empty:
+            _save(typology, "housing_typology_by_arrondissement.parquet", logger)
+    except Exception as exc:
+        logger.error("Erreur agrégation typologie parc : %s", exc, exc_info=True)
 
     # --- Étape 4 : Couche IRIS (grain primaire) ---
     # Exécutée APRÈS l'arrondissement : la rediffusion connectivité/santé/

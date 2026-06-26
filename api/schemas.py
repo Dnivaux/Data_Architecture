@@ -171,6 +171,50 @@ class PriceTimeline(BaseModel):
     transaction_count: int            = Field(0)
 
 
+class HousingTypology(BaseModel):
+    """Répartition du parc immobilier transigé (DVF) pour un arrondissement.
+
+    arrondissement=0 = agrégat « Paris entier ». Répond à l'attendu consigne :
+    « répartition du parc immobilier selon les types de logements et les surfaces ».
+    """
+
+    arrondissement: int = Field(..., ge=0, le=20, description="0 = Paris entier")
+    nb_total: int = Field(0, description="Nb total de transactions DVF retenues")
+
+    # Répartition par typologie (T1=studio … T5+ = 5 pièces et plus)
+    nb_t1: int = 0
+    nb_t2: int = 0
+    nb_t3: int = 0
+    nb_t4: int = 0
+    nb_t5p: int = 0
+    pct_t1: float = 0.0
+    pct_t2: float = 0.0
+    pct_t3: float = 0.0
+    pct_t4: float = 0.0
+    pct_t5p: float = 0.0
+
+    # Répartition par type de bien
+    nb_appartement: int = 0
+    nb_maison: int = 0
+    pct_appartement: float = 0.0
+    pct_maison: float = 0.0
+
+    # Répartition par tranche de surface (m²)
+    nb_surf_lt30: int = 0
+    nb_surf_30_50: int = 0
+    nb_surf_50_70: int = 0
+    nb_surf_70_100: int = 0
+    nb_surf_gte100: int = 0
+    pct_surf_lt30: float = 0.0
+    pct_surf_30_50: float = 0.0
+    pct_surf_50_70: float = 0.0
+    pct_surf_70_100: float = 0.0
+    pct_surf_gte100: float = 0.0
+
+    median_surface: Optional[float] = Field(None, description="Surface médiane (m²)")
+    mean_surface: Optional[float] = Field(None, description="Surface moyenne (m²)")
+
+
 class SocialHousingPoint(BaseModel):
     """Parc social financé pour un arrondissement × année (évolution)."""
 

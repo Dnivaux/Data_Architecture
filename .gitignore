@@ -39,6 +39,7 @@ logs/*.log
 .idea/
 *.iml
 
+/.claude
 # --- OS ---
 .DS_Store
 Thumbs.db

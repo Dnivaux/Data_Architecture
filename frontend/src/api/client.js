@@ -85,6 +85,11 @@ export const api = {
     timeline: (arrondissement) => get('/api/social-housing/timeline', { arrondissement }),
   },
 
+  housing: {
+    /** GET /api/housing/typology → HousingTypology (arrondissement=0 → Paris entier) */
+    typology: (arrondissement = 0) => get('/api/housing/typology', { arrondissement }),
+  },
+
   /** GET /health → HealthCheckExtended */
   health: () => get('/health'),
 };

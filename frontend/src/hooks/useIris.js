@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { withAffordability } from '../utils/formatters';
 
 /**
  * Charge les scores à la maille IRIS (~992 zones) avec géométrie WKT :
@@ -20,7 +21,7 @@ export function useIris() {
       .indicators()
       .then((data) => {
         if (!cancelled) {
-          setIris(Array.isArray(data) ? data : []);
+          setIris(Array.isArray(data) ? withAffordability(data) : []);
           setError(null);
         }
       })

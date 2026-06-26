@@ -4,6 +4,8 @@ import InteractiveMap from './InteractiveMap';
 import AnalyticsPanel from './AnalyticsPanel';
 import LiveStatusBadge from './LiveStatusBadge';
 import { useChantiers } from '../hooks/useChantiers';
+import { usePriceTimeline } from '../hooks/usePriceTimeline';
+import { useLiveAir } from '../hooks/useLiveAir';
 import { useState, useEffect } from 'react';
 
 /**
@@ -36,6 +38,19 @@ export default function DashboardLayout({
   const [selectedIris, setSelectedIris] = useState(null);
   // Réinitialiser le quartier quand on change/quitte l'arrondissement.
   useEffect(() => { setSelectedIris(null); }, [selectedArrondissement]);
+
+  // Timeline des prix : alimente le slider qui rejoue la choroplèthe par année.
+  const { years, priceByYear } = usePriceTimeline();
+  const [selectedYear, setSelectedYear] = useState(null);
+  // Défaut : la dernière année disponible (dès que la timeline est chargée).
+  useEffect(() => {
+    if (years.length && selectedYear == null) setSelectedYear(years[years.length - 1]);
+  }, [years, selectedYear]);
+  const yearPrices = selectedYear != null ? (priceByYear.get(selectedYear) ?? null) : null;
+
+  // Qualité de l'air en temps réel : alimente la choroplèthe live quand
+  // l'indicateur « Qualité de l'air » est sélectionné (daemon micro-batch air).
+  const liveAir = useLiveAir();
 
   const selectedScore = selectedArrondissement
     ? scoreMap?.[selectedArrondissement] ?? null
@@ -134,6 +149,12 @@ export default function DashboardLayout({
                 onSelectIris={setSelectedIris}
                 chantiers={chantiers}
                 showChantiers={showChantiers}
+                timelineYears={years}
+                priceYear={selectedYear}
+                yearPrices={yearPrices}
+                onYearChange={setSelectedYear}
+                liveAirValues={liveAir.aqiByArr}
+                liveAir={liveAir}
               />
             </div>
 
@@ -163,6 +184,7 @@ function computeGlobalAverage(scores) {
     'anime_score', 'calme_score',
     'connectivity_score', 'mobility_score', 'health_env_score',
     'tranquility_score', 'livability_score', 'median_price',
+    'median_income', 'affordability',
     'social_housing_pct', 'bar_count', 'nightclub_count', 'park_count',
   ];
   const sumKeys = ['nombre_logements_sociaux'];  // totaux Paris, pas une moyenne

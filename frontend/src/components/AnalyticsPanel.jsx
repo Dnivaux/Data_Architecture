@@ -1,9 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import RadarScoreChart, { IRIS_SCORE_AXES } from './RadarScoreChart';
 import PriceLineChart from './PriceLineChart';
+import HousingTypologyChart from './HousingTypologyChart';
 import { usePrices } from '../hooks/usePrices';
 import { useOperators } from '../hooks/useOperators';
-import { fmtArrondissement, fmtInt, fmtPrice, fmtEur, ARRONDISSEMENT_NAMES } from '../utils/formatters';
+import {
+  fmtArrondissement, fmtInt, fmtPrice, fmtEur, fmtAffordability,
+  computeAffordability, ARRONDISSEMENT_NAMES,
+} from '../utils/formatters';
 import { api } from '../api/client';
 
 /**
@@ -162,6 +166,12 @@ export default function AnalyticsPanel({
         )}
       </div>
 
+      {/* Accessibilité logement : prix DVF mis en relation avec le revenu INSEE */}
+      <AccessibilityCard data={scoreData} />
+
+      {/* Répartition du parc immobilier (typologie + surfaces) — DVF */}
+      <HousingTypologyChart arrondissement={selectedArrondissement || 0} />
+
       {/* Meilleur opérateur réseau */}
       {selectedArrondissement && (
         <ConnectivityDetail data={operatorData} loading={operatorsLoading} />
@@ -169,6 +179,53 @@ export default function AnalyticsPanel({
 
       {/* Métriques brutes (si arrondissement sélectionné) */}
       {indicatorData && <MetricsDetail data={indicatorData} />}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Carte Accessibilité — met en relation prix DVF et revenu médian INSEE
+// (attendu consigne : « mesures d'accessibilité prix/loyers vs revenus »)
+// ─────────────────────────────────────────────────────────────────
+function AccessibilityCard({ data }) {
+  if (!data) return null;
+  const price = data.median_price;
+  const income = data.median_income;
+  const afford = data.affordability ?? computeAffordability(income, price);
+  if (price == null && income == null && afford == null) return null;
+
+  // Effort : nombre d'années de revenu médian pour acquérir un appartement
+  // « type » de 50 m² (lecture concrète de l'accessibilité).
+  const effortYears =
+    price != null && income ? (price * 50) / income : null;
+
+  return (
+    <div className="card border border-indigo-100/70 bg-indigo-50/40">
+      <p className="text-xs text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+        <span className="material-icon text-base text-indigo-600">real_estate_agent</span>
+        Accessibilité au logement
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        <AccessStat label="Prix médian" value={fmtPrice(price)} color="#4F46E5" />
+        <AccessStat label="Revenu médian" value={income != null ? `${fmtEur(income)}/an` : '—'} color="#4F46E5" />
+        <AccessStat label="m² / an de revenu" value={fmtAffordability(afford)} color="#059669" />
+      </div>
+      {effortYears != null && (
+        <p className="text-[11px] text-slate-500 mt-2.5 leading-snug">
+          <span className="font-semibold text-slate-700">{effortYears.toFixed(1)} ans</span> de
+          revenu médian pour acquérir un 50 m² · plus le ratio « m²/an » est élevé,
+          plus le logement est accessible.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AccessStat({ label, value, color }) {
+  return (
+    <div className="bg-white/70 border border-slate-150 rounded-lg p-2 text-center">
+      <p className="text-[9px] text-slate-400 uppercase leading-tight">{label}</p>
+      <p className="text-sm font-semibold mt-0.5" style={{ color }}>{value}</p>
     </div>
   );
 }

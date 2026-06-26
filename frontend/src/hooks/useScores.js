@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { withAffordability } from '../utils/formatters';
 
 /**
  * Charge en parallèle :
@@ -16,8 +17,9 @@ export function useScores() {
     setLoading(true);
     Promise.allSettled([api.scores.all(), api.scores.indicators()])
       .then(([resScores, resIndicators]) => {
-        if (resScores.status === 'fulfilled')      setScores(resScores.value);
-        if (resIndicators.status === 'fulfilled')  setIndicators(resIndicators.value);
+        // Enrichit chaque enregistrement avec l'indice d'accessibilité prix/revenu.
+        if (resScores.status === 'fulfilled')      setScores(withAffordability(resScores.value));
+        if (resIndicators.status === 'fulfilled')  setIndicators(withAffordability(resIndicators.value));
 
         // N'affiche l'erreur que si LES DEUX ont échoué (dashboard inutilisable)
         if (resScores.status === 'rejected' && resIndicators.status === 'rejected') {

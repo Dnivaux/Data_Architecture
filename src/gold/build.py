@@ -223,27 +223,27 @@ def build_arrondissement_summary(logger: logging.Logger) -> pd.DataFrame:
                     on="arrondissement", how="left",
                 )
 
-    # Logements sociaux (Bronze direct — total cumulé toutes années)
-    # Chaque ligne = programme/immeuble agréé cette année → somme = stock total
-    df_sh = read_parquet("social_housing")
+    # Logements sociaux : stock cumulé à la dernière année observée.
+    # Source = Silver social_housing_by_year (logements_cumules = cumsum du financé),
+    # qui alimente déjà gold_social_housing_timeline. Le max du cumul = stock total.
+    df_sh = _read_silver("social_housing_by_year.parquet", logger)
     if (
         not df_sh.empty
-        and "arrondissement" in df_sh.columns
-        and "nombre_logements" in df_sh.columns
+        and {"arrondissement", "logements_cumules"}.issubset(df_sh.columns)
         and "nombre_logements_sociaux" not in base.columns
     ):
         sh_agg = (
-            df_sh.groupby("arrondissement")["nombre_logements"]
-            .sum()
+            df_sh.groupby("arrondissement")["logements_cumules"]
+            .max()
             .reset_index()
-            .rename(columns={"nombre_logements": "nombre_logements_sociaux"})
+            .rename(columns={"logements_cumules": "nombre_logements_sociaux"})
         )
         base = base.merge(sh_agg, on="arrondissement", how="left")
         base["nombre_logements_sociaux"] = (
             pd.to_numeric(base["nombre_logements_sociaux"], errors="coerce")
             .astype("Int64")
         )
-        logger.info("Logements sociaux : %d arrondissements", sh_agg["arrondissement"].nunique())
+        logger.info("Logements sociaux (stock cumulé) : %d arrondissements", sh_agg["arrondissement"].nunique())
 
     # Score composite de vivabilité globale
     base["livability_score"] = _compute_livability(base)
@@ -401,6 +401,25 @@ def build_social_housing_timeline(logger: logging.Logger) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Table 6 — Housing Typology (répartition du parc immobilier transigé)
+# ---------------------------------------------------------------------------
+
+def build_housing_typology(logger: logging.Logger) -> pd.DataFrame:
+    """Répartition du parc (typologie T1..T5+, type de bien, tranches de surface).
+
+    Passthrough Silver → Gold : la table est déjà au bon grain (1 ligne par
+    arrondissement + 1 ligne « Paris entier » à arrondissement=0).
+    """
+    df = _read_silver("housing_typology_by_arrondissement.parquet", logger)
+    if df.empty:
+        logger.warning("housing_typology_by_arrondissement.parquet absent")
+        return pd.DataFrame()
+    df = df.copy()
+    df["updated_at"] = datetime.now(timezone.utc)
+    return df.sort_values("arrondissement").reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
 # Orchestrateur principal
 # ---------------------------------------------------------------------------
 
@@ -448,11 +467,17 @@ def build_gold_layer() -> None:
         _save_gold(iris_summary, "iris_summary.parquet", logger)
 
     # Vue IRIS allégée (choroplèthes infra-arrondissement)
-    logger.info(">>> Table 7/7 : iris_indicator_scores")
+    logger.info(">>> Table 7/8 : iris_indicator_scores")
     iris_scores = build_iris_indicator_scores(logger)
     if not iris_scores.empty:
         _save_gold(iris_scores, "iris_indicator_scores.parquet", logger)
 
+    # Répartition du parc immobilier (typologie + surfaces)
+    logger.info(">>> Table 8/8 : housing_typology")
+    typology = build_housing_typology(logger)
+    if not typology.empty:
+        _save_gold(typology, "housing_typology.parquet", logger)
+
     logger.info("=" * 60)
-    logger.info("Gold layer complet — %d tables", 7)
+    logger.info("Gold layer complet — %d tables", 8)
     logger.info("=" * 60)

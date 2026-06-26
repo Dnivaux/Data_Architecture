@@ -34,7 +34,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.dependencies import get_db_status, verify_db_connection
 from api.routers import (
-    chantiers, comparison, connectivity, iris, live, mobility, poi, prices, scores, social_housing,
+    chantiers, comparison, connectivity, housing, iris, live, mobility, poi, prices, scores, social_housing,
 )
 from api.schemas import HealthCheck, HealthCheckExtended
 from api.security import APP_ENV, enforce_startup_security, install_rate_limiting, require_api_key
@@ -217,6 +217,7 @@ app.include_router(mobility.router,     prefix="/api", dependencies=_auth)
 app.include_router(chantiers.router,    prefix="/api", dependencies=_auth)
 app.include_router(connectivity.router, prefix="/api", dependencies=_auth)
 app.include_router(social_housing.router, prefix="/api", dependencies=_auth)
+app.include_router(housing.router,      prefix="/api", dependencies=_auth)
 # Routeur temps réel (WebSocket) : auth gérée en interne (query param pour le WS)
 app.include_router(live.router, prefix="/api")
 

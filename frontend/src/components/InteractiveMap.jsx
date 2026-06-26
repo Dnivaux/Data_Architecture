@@ -4,6 +4,7 @@ import L from 'leaflet';
 import wellknown from 'wellknown';
 import { indicatorColor } from '../utils/scoreColors';
 import { INDICATOR_OPTIONS, IRIS_SUPPORTED_INDICATORS } from './Sidebar';
+import TimelineSlider from './TimelineSlider';
 
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR =
@@ -26,10 +27,13 @@ const INDICATOR_ICONS = {
   pollen_total: 'grass',
   median_price: 'payments',
   median_income: 'euro',
+  affordability: 'real_estate_agent',
 };
 
 // Indicateurs en valeur brute « bas = mieux » (échelle inversée pour la légende)
 const LOWER_BETTER = new Set(['median_price', 'european_aqi', 'pollen_total']);
+// Indicateurs en valeur brute « haut = mieux » (pas un score 0-100)
+const HIGHER_BETTER_RAW = new Set(['median_income', 'affordability', 'nombre_logements_sociaux']);
 
 // ─────────────────────────────────────────────────────────────────
 // Contrôleur de vue (fitBounds / flyTo) — doit être dans MapContainer
@@ -58,7 +62,15 @@ export default function InteractiveMap({
   onSelectIris,
   chantiers,
   showChantiers,
+  // Timeline (slider d'année) — actif uniquement sur l'indicateur prix
+  timelineYears,
+  priceYear,
+  yearPrices,
+  onYearChange,
 }) {
+  // Mode « prix par année » : la choroplèthe rejoue le prix médian DVF de
+  // l'année sélectionnée au lieu de la dernière valeur connue.
+  const priceMode = selectedIndicator === 'median_price' && yearPrices != null;
   const [quartiersGeoJSON, setQuartiersGeoJSON] = useState(null);
   const [fitBounds, setFitBounds]               = useState(null);
   const [resetSignal, setResetSignal]           = useState(0);
@@ -117,17 +129,21 @@ export default function InteractiveMap({
           properties: {
             arrondissement: d.arrondissement,
             nom:            d.nom_arrondissement,
-            value:          d[selectedIndicator] ?? null,
+            value:          priceMode
+              ? (yearPrices[d.arrondissement] ?? null)
+              : (d[selectedIndicator] ?? null),
           },
         };
       })
       .filter(Boolean);
     return features.length ? { type: 'FeatureCollection', features } : null;
-  }, [indicators, selectedIndicator]);
+  }, [indicators, selectedIndicator, priceMode, yearPrices]);
 
   const allValues = useMemo(
-    () => indicators?.map((d) => d[selectedIndicator]).filter((v) => v != null) ?? [],
-    [indicators, selectedIndicator],
+    () => (priceMode
+      ? Object.values(yearPrices).filter((v) => v != null)
+      : indicators?.map((d) => d[selectedIndicator]).filter((v) => v != null) ?? []),
+    [indicators, selectedIndicator, priceMode, yearPrices],
   );
 
   // ── Couche IRIS (grain fin) — drill-down ──────────────────────
@@ -341,6 +357,19 @@ export default function InteractiveMap({
         </button>
       )}
 
+      {/* Slider temporel (overlay haut-centre) — rejoue la choroplèthe des prix.
+          Masqué en drill-down IRIS (la choroplèthe arrondissement est alors un
+          simple contour). */}
+      {priceMode && !irisActive && timelineYears?.length > 0 && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000]">
+          <TimelineSlider
+            years={timelineYears}
+            value={priceYear}
+            onChange={onYearChange}
+          />
+        </div>
+      )}
+
       {/* Légende couleur */}
       <ColorLegend indicatorId={selectedIndicator} />
 
@@ -381,7 +410,7 @@ export default function InteractiveMap({
             les clics/survols atteindre les polygones IRIS peints en dessous. */}
         {arrGeoJSON && (
           <GeoJSON
-            key={`arr-${selectedIndicator}-${irisActive ? 'outline' : 'fill'}`}
+            key={`arr-${selectedIndicator}-${priceMode ? priceYear : 'static'}-${irisActive ? 'outline' : 'fill'}`}
             ref={geoJSONRef}
             data={arrGeoJSON}
             style={styleFeature}
@@ -488,7 +517,16 @@ export default function InteractiveMap({
 function ColorLegend({ indicatorId }) {
   const indicator = INDICATOR_OPTIONS.find((o) => o.id === indicatorId) || {};
   const { label = 'Score', icon = 'insights' } = indicator;
-  const isPrice = LOWER_BETTER.has(indicatorId);
+  // « bas = mieux » (prix, AQI, pollen) → gradient inversé vert→rouge
+  const lowerBetter = LOWER_BETTER.has(indicatorId);
+  const rawHigherBetter = HIGHER_BETTER_RAW.has(indicatorId);
+
+  // Libellé des bornes selon la nature de l'indicateur
+  const rangeLabel = lowerBetter
+    ? 'Bas → Élevé'
+    : rawHigherBetter
+      ? 'Faible → Élevé'
+      : '0 → 100';
 
   return (
     <div className="absolute bottom-5 left-3 z-[1000] bg-white/95 border border-slate-200 rounded-lg px-3 py-2 text-xs backdrop-blur-sm shadow-sm">
@@ -502,12 +540,12 @@ function ColorLegend({ indicatorId }) {
         <div
           className="w-20 h-2 rounded-full"
           style={{
-            background: isPrice
+            background: lowerBetter
               ? 'linear-gradient(to right, #10B981, #84CC16, #FACC15, #F97316, #EF4444)'
               : 'linear-gradient(to right, #EF4444, #F97316, #FACC15, #84CC16, #10B981)',
           }}
         />
-        <span className="text-slate-500">{isPrice ? 'Bas → Élevé' : '0 → 100'}</span>
+        <span className="text-slate-500">{rangeLabel}</span>
       </div>
     </div>
   );
@@ -524,5 +562,9 @@ function formatIndicatorValue(indicatorId, value) {
     return `AQI ${Math.round(value)} (Europe)`;
   if (indicatorId === 'pollen_total')
     return `${Math.round(value)} grains/m³`;
+  if (indicatorId === 'median_income')
+    return `${new Intl.NumberFormat('fr-FR').format(Math.round(value))} €/an`;
+  if (indicatorId === 'affordability')
+    return `${value.toFixed(1)} m²/an de revenu`;
   return `${value.toFixed(1)} / 100`;
 }

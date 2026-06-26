@@ -34,15 +34,56 @@ from api.security import API_KEYS, is_valid_api_key, require_api_key
 router = APIRouter(prefix="/live", tags=["live"])
 
 _VELIB_ROOT = Path(__file__).parents[2] / "data" / "bronze" / "velib"
+_AIR_ROOT = Path(__file__).parents[2] / "data" / "bronze" / "air_quality_live"
 _POLL_SECONDS = 5  # fréquence de vérification d'un nouveau lot
+
+
+def _latest_batch_in(root: Path) -> Path | None:
+    """Retourne le chemin du lot le plus récent sous `root`, ou None."""
+    if not root.exists():
+        return None
+    batches = sorted(root.rglob("batch_*.parquet"), key=lambda p: p.stat().st_mtime)
+    return batches[-1] if batches else None
 
 
 def _latest_batch_path() -> Path | None:
     """Retourne le chemin du lot Vélib' le plus récent, ou None."""
-    if not _VELIB_ROOT.exists():
-        return None
-    batches = sorted(_VELIB_ROOT.rglob("batch_*.parquet"), key=lambda p: p.stat().st_mtime)
-    return batches[-1] if batches else None
+    return _latest_batch_in(_VELIB_ROOT)
+
+
+def _aggregate_air(path: Path) -> dict:
+    """Agrège un lot qualité de l'air en métriques temps réel exploitables."""
+    df = pd.read_parquet(path, engine="pyarrow")
+    cols = ["arrondissement", "european_aqi", "aqi_level", "aqi_label",
+            "pm2_5", "pm10", "no2", "o3", "pollen_total", "pollen_risk"]
+    by_arr = df[[c for c in cols if c in df.columns]].to_dict("records")
+    aqi = df["european_aqi"].dropna()
+    worst_idx = aqi.idxmax() if not aqi.empty else None
+    return {
+        "batch_file": path.name,
+        "batch_ts": str(df["ingested_at"].max()) if "ingested_at" in df.columns else None,
+        "served_at": datetime.now(timezone.utc).isoformat(),
+        "totals": {
+            "arrondissements": int(len(df)),
+            "european_aqi_mean": round(float(aqi.mean()), 1) if not aqi.empty else None,
+            "pm2_5_mean": round(float(df["pm2_5"].mean()), 1) if "pm2_5" in df.columns else None,
+            "worst_arrondissement": int(df.loc[worst_idx, "arrondissement"]) if worst_idx is not None else None,
+            "worst_aqi": round(float(aqi.max()), 1) if not aqi.empty else None,
+        },
+        "by_arrondissement": by_arr,
+    }
+
+
+@router.get(
+    "/air/latest",
+    summary="Dernier instantané qualité de l'air agrégé (temps réel)",
+    dependencies=[Depends(require_api_key)],
+)
+def air_latest() -> dict:
+    path = _latest_batch_in(_AIR_ROOT)
+    if not path:
+        return {"status": "no_data", "message": "Aucun lot air — lancer le daemon micro-batch air."}
+    return {"status": "ok", **_aggregate_air(path)}
 
 
 def _aggregate(path: Path) -> dict:
