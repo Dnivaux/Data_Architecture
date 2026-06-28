@@ -152,14 +152,30 @@ async def add_process_time_header(request: Request, call_next):
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Ajoute les en-têtes de sécurité recommandés à chaque réponse."""
 
+    # Routes de documentation : Swagger UI / ReDoc chargent des assets depuis un
+    # CDN puis font un fetch de /openapi.json. Une CSP "default-src 'none'" les
+    # bloque → page blanche. On y applique donc une CSP permissive ciblée.
+    _DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
+
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-        # API JSON : aucune ressource active n'est servie → CSP verrouillée.
-        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        if request.url.path in self._DOCS_PATHS:
+            # CSP permissive pour la doc interactive (CDN jsdelivr + init inline + fetch self).
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+                "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+                "img-src 'self' https://fastapi.tiangolo.com data:; "
+                "worker-src blob:; "
+                "connect-src 'self'"
+            )
+        else:
+            # API JSON : aucune ressource active n'est servie → CSP verrouillée.
+            response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
         # HSTS uniquement en production (suppose une terminaison TLS en amont).
         if APP_ENV == "production":
             response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"

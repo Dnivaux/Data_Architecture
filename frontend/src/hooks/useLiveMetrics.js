@@ -38,7 +38,9 @@ export function useLiveMetrics(intervalMs = DEFAULT_INTERVAL_MS) {
     setIsLoading(true);
 
     try {
-      const res = await fetch(LIVE_ENDPOINT, { signal: abortRef.current.signal });
+      const apiKey = import.meta.env.VITE_API_KEY ?? '';
+      const headers = apiKey ? { 'X-API-Key': apiKey } : undefined;
+      const res = await fetch(LIVE_ENDPOINT, { headers, signal: abortRef.current.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status} — ${res.statusText}`);
 
       const json = await res.json();

@@ -35,7 +35,9 @@ export function useLiveAir(intervalMs = DEFAULT_INTERVAL_MS) {
     if (!mountedRef.current) return;
 
     try {
-      const res = await fetch(LIVE_AIR_ENDPOINT, { signal: abortRef.current.signal });
+      const apiKey = import.meta.env.VITE_API_KEY ?? '';
+      const headers = apiKey ? { 'X-API-Key': apiKey } : undefined;
+      const res = await fetch(LIVE_AIR_ENDPOINT, { headers, signal: abortRef.current.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (!mountedRef.current) return;

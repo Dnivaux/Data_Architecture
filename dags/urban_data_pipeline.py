@@ -69,7 +69,14 @@ with DAG(
         python_callable=ingest_mobility_once,
     )
 
-    silver = PythonOperator(task_id="build_silver", python_callable=run_silver)
+    # trigger_rule="all_done" : Silver s'exécute même si une source Bronze a
+    # échoué (résilience — une source ouverte indisponible ne doit pas bloquer
+    # tout le pipeline). La tâche en échec reste visible (rouge) dans l'UI.
+    silver = PythonOperator(
+        task_id="build_silver",
+        python_callable=run_silver,
+        trigger_rule="all_done",
+    )
     gold = PythonOperator(task_id="build_gold", python_callable=run_gold)
     export = PythonOperator(task_id="export_postgres", python_callable=run_export_pg)
 

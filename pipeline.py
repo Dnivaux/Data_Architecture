@@ -119,12 +119,25 @@ def run_full_pipeline(
     if not skip_bronze:
         logger.info("\n%s\n>>> BRONZE LAYER\n%s", "─" * 50, "─" * 50)
 
-        # Sources historiques (DVF, OSM, boundaries, revenus, air_quality, crime)
-        try:
-            logger.info("[1/4] Sources historiques (DVF, OSM, boundaries, crime…)")
-            logger.info("      → Exécuter 'python main.py' pour ingérer ces sources")
-        except Exception as exc:
-            logger.error("Sources historiques échouées : %s", exc)
+        # Sources de base (DVF, OSM, boundaries, IRIS, revenus, air_quality).
+        # On réutilise le registre de main.py (source unique de vérité) et on
+        # ingère chaque source de façon résiliente : une source qui échoue
+        # (réseau, API indisponible) n'interrompt pas le reste du pipeline.
+        # 'crime' est volontairement exclu (source retirée du produit final).
+        logger.info("[1/4] Sources de base (DVF, OSM, boundaries, IRIS, revenus…)")
+        import argparse as _argparse
+        from main import _build_task_map
+
+        _core_sources = ["boundaries", "iris", "dvf", "osm", "revenus", "air_quality"]
+        _task_map = _build_task_map(_argparse.Namespace(date_min=None, date_max=None))
+        for _src in _core_sources:
+            try:
+                t0 = time.perf_counter()
+                _df = _task_map[_src]()
+                rows = len(_df) if _df is not None else 0
+                logger.info("    OK [%s] — %d lignes (%.1fs)", _src, rows, time.perf_counter() - t0)
+            except Exception as exc:
+                logger.error("    ERREUR [%s] : %s", _src, exc, exc_info=True)
 
         # Nouveaux indicateurs statiques
         logger.info("[2/4] Indicateurs stratégiques statiques")

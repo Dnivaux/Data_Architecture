@@ -31,6 +31,28 @@ Changements v4 (2026-06-23) :
     Bruitparif (Lden 45% jour-soir-nuit + Ln 25% nuit) + vie nocturne 30%.
     La criminalité (crime_count_total, crime_rate_per_1000) reste exposée
     UNIQUEMENT comme métrique détaillée.
+
+Changements v5 (2026-06-26) — note méthodologique (normalisation par percentile) :
+  ✓ Tous les scores sont normalisés par RANG sur [0, 100]. PAR CONSTRUCTION,
+    l'unité la moins bien classée obtient exactement 0 et la mieux classée 100.
+    Un score de 0 signifie donc « dernier du classement », et NON « valeur nulle »
+    ou « absence d'équipement ».
+  ✓ Pourquoi un même territoire peut être à 0 en maille arrondissement et ~90 en
+    maille IRIS : les deux normalisations s'appliquent sur des populations
+    différentes (20 arrondissements vs ~992 IRIS) ET sur des grandeurs
+    différentes (comptes ABSOLUS par arrondissement vs comptes par zone IRIS).
+    Exemple : le 2e arrondissement (le plus petit) a peu d'équipements en valeur
+    absolue → dernier rang sur 20 → score 0 ; mais ses IRIS centraux sont très
+    denses → haut percentile parmi 992 zones → ~90. Les deux lectures sont
+    correctes mais ne se comparent pas directement (relatif intra-population).
+    → HARMONISATION (couche Gold, src/gold/build.py) : le score EXPOSÉ d'un
+      arrondissement est désormais la MOYENNE des scores de ses IRIS (et non
+      plus un calcul indépendant), pour que les deux mailles racontent la même
+      chose (fin de l'incohérence 20 en arrondissement vs 90 en IRIS). Le
+      scoring arrondissement natif ci-dessous reste calculé et sert de REPLI si
+      la couche IRIS est indisponible. Effet attendu : les scores
+      d'arrondissement sont plus resserrés (la moyenne d'~50 IRIS ne produit
+      plus de 0 ni de 100 extrêmes — c'est normal et plus honnête).
 """
 from __future__ import annotations
 

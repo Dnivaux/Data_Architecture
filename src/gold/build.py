@@ -134,6 +134,32 @@ def _compute_livability(df: pd.DataFrame) -> pd.Series:
     return (score / total_weight).round(1)
 
 
+def _arrondissement_scores_from_iris(logger: logging.Logger) -> pd.DataFrame:
+    """Harmonisation hiérarchique : score arrondissement = MOYENNE des scores IRIS.
+
+    Pour que la lecture par arrondissement soit cohérente avec la maille IRIS
+    (sinon un même territoire peut afficher 20 en arrondissement et 90 en IRIS),
+    chaque `*_score` d'arrondissement devient la moyenne des `*_score` de ses
+    IRIS. Retourne [arrondissement, *_score] — ou un DataFrame vide si la couche
+    IRIS est absente (le pipeline retombe alors sur le scoring natif).
+    """
+    iris = _read_silver("scores_by_iris.parquet", logger)
+    if iris.empty or "arrondissement" not in iris.columns:
+        return pd.DataFrame()
+    score_cols = [c for c in iris.columns if c.endswith("_score")]
+    if not score_cols:
+        return pd.DataFrame()
+    agg = iris.groupby("arrondissement")[score_cols].mean().round(1).reset_index()
+    agg["arrondissement"] = pd.to_numeric(agg["arrondissement"], errors="coerce")
+    agg = agg.dropna(subset=["arrondissement"])
+    agg["arrondissement"] = agg["arrondissement"].astype(int)
+    logger.info(
+        "Harmonisation scores : arrondissement = moyenne des IRIS "
+        "(%d arrondissements ; %s)", len(agg), ", ".join(score_cols),
+    )
+    return agg
+
+
 # ---------------------------------------------------------------------------
 # Table 1 — Arrondissement Summary (table maîtresse Gold)
 # ---------------------------------------------------------------------------
@@ -245,6 +271,15 @@ def build_arrondissement_summary(logger: logging.Logger) -> pd.DataFrame:
         )
         logger.info("Logements sociaux (stock cumulé) : %d arrondissements", sh_agg["arrondissement"].nunique())
 
+    # --- Harmonisation hiérarchique : score arrondissement = moyenne des IRIS ---
+    # Évite qu'un même territoire affiche 20 en maille arrondissement et 90 en
+    # maille IRIS. On écrase les *_score natifs par la moyenne des scores IRIS.
+    harmonized = _arrondissement_scores_from_iris(logger)
+    if not harmonized.empty:
+        hcols = [c for c in harmonized.columns if c.endswith("_score")]
+        base = base.drop(columns=[c for c in hcols if c in base.columns], errors="ignore")
+        base = base.merge(harmonized, on="arrondissement", how="left")
+
     # Score composite de vivabilité globale
     base["livability_score"] = _compute_livability(base)
 
@@ -334,7 +369,12 @@ def build_indicator_scores(logger: logging.Logger) -> pd.DataFrame:
     boundaries = _load_boundaries_wkt(logger)
     base = base.merge(boundaries, on="arrondissement", how="left")
 
-    if not summary.empty:
+    # Scores harmonisés = moyenne des IRIS (cohérence maille fine ↔ agrégée).
+    # Repli sur le scoring arrondissement natif si la couche IRIS est absente.
+    harmonized = _arrondissement_scores_from_iris(logger)
+    if not harmonized.empty:
+        base = base.merge(harmonized, on="arrondissement", how="left")
+    elif not summary.empty:
         score_cols = [c for c in summary.columns
                       if c.endswith("_score") and c in summary.columns]
         drop_geom = [c for c in ["geometry", "geometry_wkt", "computed_at"] if c in summary.columns]
