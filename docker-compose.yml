@@ -46,6 +46,11 @@ services:
       RATE_LIMIT: ${RATE_LIMIT:-120/minute}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}               # restreindre au(x) domaine(s) servi(s) en prod
+    volumes:
+      # data/ est exclu de l'image (.dockerignore) : on le monte en lecture seule
+      # pour que l'API lise les données Bronze/Gold produites par le pipeline Airflow
+      # (ex. endpoint /api/mobility/live → data/bronze/velib, fallbacks Parquet Gold).
+      - ./data:/app/data:ro
     ports:
       - "8000:8000"
     depends_on:

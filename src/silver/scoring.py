@@ -129,6 +129,16 @@ def _rank_fill(series: pd.Series, invert: bool = False) -> pd.Series:
     return _rank_normalize(s, invert=invert)
 
 
+def _minmax_stretch(s: pd.Series) -> pd.Series:
+    """Réétire linéairement le mélange pondéré sur [0, 100] sans réordonner.
+    Préserve l'effet proportionnel des pondérations, contrairement à _rank_normalize."""
+    s = pd.to_numeric(s, errors="coerce")
+    lo, hi = s.min(), s.max()
+    if not pd.notna(lo) or hi == lo:
+        return pd.Series(50.0, index=s.index)
+    return ((s - lo) / (hi - lo) * 100.0).round(1)
+
+
 def _read_silver(filename: str) -> pd.DataFrame:
     """Charge une table Silver Parquet. Retourne DataFrame vide si absente."""
     path = SILVER_ROOT / filename
@@ -526,14 +536,14 @@ class IrisScorer:
             + 0.10 * _rank_fill(df["restaurant_count"])
             + 0.05 * _rank_fill(df["stadium_count"])
         )
-        df["anime_score"] = _rank_normalize(blend)
+        df["anime_score"] = _minmax_stretch(blend)
         return df[["code_iris", "bar_count", "nightclub_count", "park_count",
                    "cinema_count", "restaurant_count", "stadium_count", "museum_count",
                    "anime_score"]]
 
     def score_connectivity(self) -> pd.DataFrame:
         df = self._merge_base(_read_silver("connectivity_by_iris.parquet"))
-        df["connectivity_score"] = _rank_normalize(
+        df["connectivity_score"] = _minmax_stretch(
             0.40 * _rank_fill(df.get("pct_eligible_ftth"))
             + 0.30 * _rank_fill(df.get("pct_pop_4g_mean"))
             + 0.15 * _rank_fill(df.get("pct_pop_5g_mean"))
@@ -556,7 +566,7 @@ class IrisScorer:
             )
         else:
             s_transit = pd.Series([50.0] * len(df), index=df.index)
-        df["mobility_score"] = _rank_normalize(0.60 * s_transit + 0.40 * s_stations)
+        df["mobility_score"] = _minmax_stretch(0.60 * s_transit + 0.40 * s_stations)
         keep = ["code_iris", "station_count_velib", "avg_bikes_available",
                 "transit_stop_count", "metro_count", "rer_count",
                 "tram_count", "bus_count", "mobility_score"]
@@ -573,7 +583,7 @@ class IrisScorer:
             s_air = _rank_fill(df["avg_atmo_index"], invert=True)
         else:
             s_air = pd.Series([50.0] * len(df), index=df.index)
-        df["health_env_score"] = _rank_normalize(
+        df["health_env_score"] = _minmax_stretch(
             0.40 * s_air + 0.25 * s_surface + 0.20 * s_arbres + 0.15 * s_ilots
         )
         keep = ["code_iris", "surface_fraicheur_ha", "arbres_per_km2",
@@ -591,7 +601,7 @@ class IrisScorer:
             + pd.to_numeric(df.get("nb_nightclubs"), errors="coerce").fillna(0)
         )
         s_nightlife = _rank_fill(nightlife, invert=True)
-        df["tranquility_score"] = _rank_normalize(
+        df["tranquility_score"] = _minmax_stretch(
             0.45 * s_bruit_lden + 0.25 * s_bruit_ln + 0.30 * s_nightlife
         )
         keep = ["code_iris", "crime_count_total", "crime_rate_per_1000",
