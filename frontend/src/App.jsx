@@ -6,7 +6,7 @@ import { useLiveMetrics } from './hooks/useLiveMetrics';
 
 export default function App() {
   const [selectedArrondissement, setSelectedArrondissement] = useState(null);
-  const [selectedIndicator, setSelectedIndicator] = useState('connectivity_score');
+  const [selectedIndicator, setSelectedIndicator] = useState('livability_score');
 
   const { scores, indicators, scoreMap, indicatorMap, loading, error } = useScores();
   const { iris } = useIris();

@@ -2,7 +2,8 @@ import LiveStatusBadge from './LiveStatusBadge';
 
 export const INDICATOR_OPTIONS = [
   { id: 'livability_score',   label: 'Score de vivabilité',    icon: 'insights' },
-  { id: 'connectivity_score', label: 'Connectivité',          icon: 'wifi' },
+  // « Connectivité » retiré de la liste déroulante : le réseau reste consultable
+  // dans la carte détaillée « Réseau & Connectivité » (panneau par arrondissement).
   { id: 'mobility_score',     label: 'Mobilité',              icon: 'directions_bike' },
   { id: 'health_env_score',   label: 'Santé Environnementale',icon: 'eco', desc: 'Végétalisation, air pur, îlots de fraîcheur' },
   { id: 'tranquility_score',  label: 'Tranquillité',          icon: 'shield', desc: 'Sécurité, peu de dynamisme nocturne' },
@@ -18,7 +19,7 @@ export const INDICATOR_OPTIONS = [
 // Indicateurs réellement disponibles à la maille IRIS (les autres — qualité de
 // l'air, pollen — ne sont publiés qu'à l'arrondissement et restent en repli).
 export const IRIS_SUPPORTED_INDICATORS = new Set([
-  'livability_score', 'connectivity_score', 'mobility_score',
+  'livability_score', 'mobility_score',
   'health_env_score', 'tranquility_score', 'anime_score',
   'median_price', 'median_income', 'affordability',
 ]);
