@@ -17,7 +17,7 @@ docker compose ps postgres mongo >/dev/null
 
 echo "==> Dump + restore PostgreSQL (urbandata) vers le Pi…"
 docker compose exec -T postgres pg_dump -U postgres -Fc urbandata \
-  | ssh "$PI" "$REMOTE exec -T postgres pg_restore -U postgres -d urbandata --clean --if-exists --no-owner"
+  | ssh "$PI" "$REMOTE exec -u postgres -T postgres pg_restore -U postgres -d urbandata --clean --if-exists --no-owner"
 
 echo "==> Dump + restore MongoDB (urbandata) vers le Pi…"
 docker compose exec -T mongo mongodump --db urbandata --archive \
