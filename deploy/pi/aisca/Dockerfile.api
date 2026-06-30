@@ -1,0 +1,21 @@
+# AISCA Medical — API FastAPI (SBERT + Gemini).
+# Copié dans le clone du repo par deploy.sh sous le nom Dockerfile.pi-api.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Pré-télécharge le modèle SBERT DANS l'image → pas de download au runtime.
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+
+COPY . .
+
+EXPOSE 8000
+# GOOGLE_API_KEY est fourni par docker-compose (--env-file ~/apps/.env)
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]

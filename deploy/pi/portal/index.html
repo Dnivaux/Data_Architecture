@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Projets — David Nivaux</title>
+  <style>
+    :root { --bg:#0b1020; --card:#161d33; --card2:#1d2742; --txt:#e8ecf6; --muted:#9aa6c4; --accent:#5b8cff; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(1200px 600px at 50% -10%, #1a2547 0%, var(--bg) 60%);
+      color: var(--txt); min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 40px 20px;
+    }
+    header { text-align: center; margin-bottom: 48px; }
+    header h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 700; letter-spacing: -0.02em; }
+    header p { color: var(--muted); margin-top: 12px; font-size: 17px; }
+    .grid {
+      display: grid; gap: 24px; width: 100%; max-width: 1040px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .card {
+      background: linear-gradient(160deg, var(--card2), var(--card));
+      border: 1px solid rgba(255,255,255,0.07); border-radius: 18px;
+      padding: 28px; text-decoration: none; color: inherit;
+      display: flex; flex-direction: column; gap: 14px;
+      transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+    .card:hover { transform: translateY(-6px); border-color: var(--accent);
+      box-shadow: 0 18px 40px rgba(0,0,0,.45); }
+    .icon { font-size: 40px; }
+    .card h2 { font-size: 21px; font-weight: 650; }
+    .card p { color: var(--muted); font-size: 14.5px; line-height: 1.5; flex: 1; }
+    .tag { font-size: 12px; color: var(--accent); font-weight: 600;
+      text-transform: uppercase; letter-spacing: .06em; }
+    .go { margin-top: 6px; font-size: 14px; font-weight: 600; color: var(--accent); }
+    footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Portfolio de projets Data</h1>
+    <p>Soutenance — trois projets hébergés sur Raspberry Pi 5</p>
+  </header>
+
+  <main class="grid">
+    <a class="card" href="https://urban.daenivaux.fr">
+      <div class="icon">🗺️</div>
+      <span class="tag">Data Architecture</span>
+      <h2>Urban Data Explorer</h2>
+      <p>Plateforme d'analyse de la qualité de vie à Paris. Architecture médaillon
+         (Bronze→Silver→Gold), PostGIS + MongoDB, API FastAPI, cartographie interactive
+         par arrondissement et IRIS, orchestration Airflow.</p>
+      <span class="go">Ouvrir →</span>
+    </a>
+
+    <a class="card" href="https://marketing.daenivaux.fr">
+      <div class="icon">📈</div>
+      <span class="tag">Data Science</span>
+      <h2>Marketing ROI</h2>
+      <p>Optimisation de l'allocation des budgets marketing (TV, radio, social, influence).
+         Modèles XGBoost / Random Forest, interprétabilité SHAP, dashboard de simulation
+         en temps réel.</p>
+      <span class="go">Ouvrir →</span>
+    </a>
+
+    <a class="card" href="https://aisca.daenivaux.fr">
+      <div class="icon">⚕️</div>
+      <span class="tag">GenAI</span>
+      <h2>AISCA Medical</h2>
+      <p>Cartographie de compétences médicales par IA : analyse sémantique (SBERT),
+         recommandation de métiers et plans de progression générés par Gemini,
+         interface React.</p>
+      <span class="go">Ouvrir →</span>
+    </a>
+  </main>
+
+  <footer>© <span id="y"></span> David Nivaux — EFREI</footer>
+  <script>document.getElementById('y').textContent = new Date().getFullYear();</script>
+</body>
+</html>

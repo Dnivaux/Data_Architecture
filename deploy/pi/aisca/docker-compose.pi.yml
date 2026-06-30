@@ -1,0 +1,28 @@
+# AISCA Medical — stack Pi (copié dans le clone du repo par deploy.sh).
+#   api      : FastAPI + SBERT + Gemini → 127.0.0.1:8003
+#   frontend : React/Vite (nginx)        → 127.0.0.1:8013  (via aisca.daenivaux.fr)
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.pi-api
+    environment:
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:?GOOGLE_API_KEY manquant dans ~/apps/.env}
+    ports:
+      - "127.0.0.1:8003:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.pi-front
+    ports:
+      - "127.0.0.1:8013:80"
+    depends_on:
+      - api
+    restart: unless-stopped

@@ -1,0 +1,15 @@
+# AISCA Medical — frontend React/Vite → service statique nginx.
+# Copié dans le clone (frontend/) par deploy.sh sous le nom Dockerfile.pi-front.
+# client.js tape /api (relatif) → réécrit/proxifié par OpenResty vers aisca-api.
+
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm install --no-audit --no-fund
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80

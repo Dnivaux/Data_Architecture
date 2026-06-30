@@ -1,0 +1,34 @@
+# Data Science Marketing — stack Pi (copié dans le clone du repo par deploy.sh).
+#   api       : FastAPI ROI       → 127.0.0.1:8002
+#   dashboard : Streamlit         → 127.0.0.1:8012  (exposé via marketing.daenivaux.fr)
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.pi
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "127.0.0.1:8002:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/model-info"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.pi
+    command: >
+      streamlit run app_dashboard/main_app.py
+      --server.port 8501 --server.address 0.0.0.0
+      --server.enableCORS false --server.enableXsrfProtection false
+      --server.headless true
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "127.0.0.1:8012:8501"
+    depends_on:
+      - api
+    restart: unless-stopped
